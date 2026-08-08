@@ -24,6 +24,8 @@ export interface Note {
   body: string;
   /** outgoing wikilink targets (deduplicated raw names) */
   links: string[];
+  /** set when the YAML frontmatter could not be parsed; the note still loads */
+  parseError?: string;
 }
 
 export interface Edge {

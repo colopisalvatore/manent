@@ -48,6 +48,9 @@ status: active
 - `description` is the retrieval surface: one line that lets a ranker judge relevance without opening the note.
 - Unknown extra fields are allowed (`additionalProperties: true`) — forward compatibility.
 - YAML dates parse as Date objects; tools MUST normalize to `YYYY-MM-DD` strings before validation.
+- Notes are hand-written, so invalid YAML happens (a `description` containing `": "` is the common
+  case). Tools MUST NOT fail the whole run on one bad note: load it with empty frontmatter and its
+  body intact, and report it as `frontmatter-invalid`. A vault stays usable while a note is broken.
 
 ### Body conventions by type
 
@@ -86,6 +89,7 @@ Adding a type = spec PR + minor version bump.
 
 | rule | severity |
 |---|---|
+| `frontmatter-invalid` (YAML does not parse) | error |
 | `frontmatter-missing` | error |
 | `schema` (base schema violation) | error |
 | `duplicate-name` | error |
