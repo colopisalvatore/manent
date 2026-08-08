@@ -14,6 +14,25 @@ export interface HttpOptions {
 const sha = (s: string) => createHash("sha256").update(s, "utf8").digest();
 const safeEqual = (a: string, b: string) => timingSafeEqual(sha(a), sha(b));
 
+/** Revisions the official SDK speaks today (handshake-based, "legacy" era). */
+const LEGACY_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26"] as const;
+
+/**
+ * True when the request is written in the modern, handshake-free era
+ * (2026-07-28+): the `server/discover` RPC, per-request protocol metadata,
+ * or the transport headers that revision made mandatory.
+ */
+function isModernRequest(req: IncomingMessage, body: unknown): boolean {
+  if (req.headers["mcp-method"] !== undefined) return true;
+  if (!body || typeof body !== "object") return false;
+  const b = body as Record<string, unknown>;
+  if (b.method === "server/discover" || b.method === "subscriptions/listen") return true;
+  const params = (b.params ?? {}) as Record<string, unknown>;
+  const meta = { ...((b._meta as object) ?? {}), ...((params._meta as object) ?? {}) } as Record<string, unknown>;
+  const declared = meta["io.modelcontextprotocol/protocolVersion"];
+  return typeof declared === "string" && declared >= "2026-";
+}
+
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {
   if (req.method !== "POST") return undefined;
   const chunks: Buffer[] = [];
@@ -110,6 +129,25 @@ export async function serveHttp(root: string, opts: HttpOptions): Promise<Server
           )} mcpMethodHeader=${String(req.headers["mcp-method"] ?? "-")}`,
         );
       }
+      // Backward-compatibility signal for modern (2026-07-28+) clients.
+      // This server speaks the legacy, handshake-based revisions via the
+      // official SDK. Per the spec's HTTP fallback rule, a modern client
+      // falls back to `initialize` when a modern request returns 4xx with no
+      // recognized modern error body — a 200 carrying "Method not found"
+      // instead reads as an unusable server.
+      if (isModernRequest(req, body)) {
+        res.writeHead(400, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            error: "legacy_protocol_only",
+            message:
+              "This server implements the initialize-handshake protocol revisions. Retry with the legacy initialize flow.",
+            supportedVersions: LEGACY_VERSIONS,
+          }),
+        );
+        return;
+      }
+
       const server = buildBrainServer(ctx);
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined, // stateless
