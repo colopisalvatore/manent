@@ -2,13 +2,23 @@ import { createServer, type IncomingMessage, type Server } from "node:http";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { buildBrainServer, loadBrainContext } from "./index.js";
+import { handleOAuth, verifyAccessToken } from "./oauth.js";
 
 export interface HttpOptions {
   port: number;
   /** bind address — defaults to 127.0.0.1 so only a local tunnel/proxy can reach it */
   host?: string;
-  /** required bearer token; requests without it get 401 */
+  /** required bearer token; also the password of the OAuth consent page */
   token: string;
+  /** extra hosts allowed as OAuth redirect targets (claude.ai is allowed by default) */
+  allowedRedirectHosts?: string[];
+}
+
+/** Public origin as seen by the client, honouring the tunnel/proxy headers. */
+function externalOrigin(req: IncomingMessage): string {
+  const proto = (req.headers["x-forwarded-proto"] as string | undefined)?.split(",")[0]?.trim() ?? "http";
+  const host = (req.headers["x-forwarded-host"] as string | undefined) ?? req.headers.host ?? "localhost";
+  return `${proto}://${host}`;
 }
 
 const sha = (s: string) => createHash("sha256").update(s, "utf8").digest();
@@ -89,12 +99,14 @@ export async function serveHttp(root: string, opts: HttpOptions): Promise<Server
         res.setHeader("access-control-expose-headers", "mcp-session-id");
       }
 
-      // Discovery probes must answer in the clear: a 401 here makes clients
-      // (claude.ai) assume OAuth is available and attempt registration, which
-      // then fails. A plain 404 tells them this server has no OAuth.
-      if (path.startsWith("/.well-known/") || path === "/register") {
-        res.writeHead(404, { "content-type": "application/json" });
-        res.end(JSON.stringify({ error: "no OAuth on this server — use bearer token or /t/<token>/mcp" }));
+      // OAuth endpoints are public by design — discovery is what lets clients
+      // that require OAuth (claude.ai) connect at all.
+      if (
+        await handleOAuth(req, res, path.replace(/^\/t\/[^/]+/, ""), {
+          masterToken: opts.token,
+          allowedRedirectHosts: opts.allowedRedirectHosts,
+        })
+      ) {
         return;
       }
 
@@ -106,8 +118,17 @@ export async function serveHttp(root: string, opts: HttpOptions): Promise<Server
         provided ??= decodeURIComponent(pathToken[1]);
         path = pathToken[2];
       }
-      if (!provided || !safeEqual(provided, opts.token)) {
-        res.writeHead(401, { "content-type": "application/json" });
+      // Accept either the vault token itself or an OAuth-issued access token.
+      const authorized =
+        provided !== undefined &&
+        (safeEqual(provided, opts.token) || verifyAccessToken(opts.token, provided));
+      if (!authorized) {
+        // Point unauthenticated clients at the metadata that tells them how to
+        // authenticate (RFC 9728) — without it they cannot start the flow.
+        res.writeHead(401, {
+          "content-type": "application/json",
+          "www-authenticate": `Bearer realm="manent", resource_metadata="${externalOrigin(req)}/.well-known/oauth-protected-resource"`,
+        });
         res.end(JSON.stringify({ error: "unauthorized" }));
         return;
       }
