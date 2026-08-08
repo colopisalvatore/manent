@@ -52,15 +52,30 @@ claude mcp add mybrain -- node <repo>/packages/cli/dist/index.js serve <vault>
 
 ### Use from claude.ai (web)
 
-1. Serve over HTTP (above) and expose it, e.g. `cloudflared tunnel --url http://127.0.0.1:3939`.
-2. claude.ai → Settings → Connectors → Add custom connector → URL `https://<your-host>/mcp`.
-3. Auth: add a request header `Authorization: Bearer <token>` (beta feature). If your account
-   doesn't have request headers yet, use the capability-URL fallback:
-   `https://<your-host>/t/<token>/mcp` — that URL **is** a credential; treat it like a password
-   and rotate it by restarting with a new token.
+Verified working. claude.ai will not connect to a remote MCP server that has no discoverable
+OAuth metadata, so the HTTP server ships its own single-owner authorization server: your vault
+token is the login password.
 
-The HTTP endpoint binds `127.0.0.1` by default and refuses to start without a token — a vault
-never goes on the network unauthenticated by accident.
+1. Serve over HTTP and expose it — a tunnel (`cloudflared tunnel --url http://127.0.0.1:3939`)
+   or a reverse proxy. HTTPS is required by OAuth for non-localhost redirects.
+2. claude.ai → Settings → Connectors → Add custom connector → URL `https://<your-host>/mcp`.
+   Leave the OAuth Client ID empty; discovery and registration are automatic.
+3. claude.ai opens the consent page. Paste your vault token, approve, done.
+
+Access tokens are HMAC-derived from the vault token rather than stored, so a connected client
+survives server restarts. Rotating the vault token invalidates every issued token.
+
+Three details worth knowing:
+
+- The endpoint binds `127.0.0.1` by default and refuses to start without a token — a vault never
+  reaches the network unauthenticated by accident.
+- Redirect URIs are restricted to an allowlist (`claude.ai`, `claude.com`, localhost) and must be
+  HTTPS. PKCE S256 is mandatory; authorization codes are single-use and expire in five minutes.
+- `/t/<token>/mcp` also works for clients that can neither set headers nor do OAuth. That URL
+  **is** a credential — treat it like a password.
+
+Run `npm run test:oauth` to exercise the whole flow, including wrong token, failed PKCE, code
+replay, forged token and disallowed redirect.
 
 ## Vault layout (see `packages/spec/SPEC.md`)
 
@@ -87,6 +102,8 @@ vault/
 - [ ] Curation: embedding-cluster dedup, contradiction detection, Leiden community → MOC suggestions
 - [ ] Eval harness: golden set, recall@k / MRR, CI regression gate
 - [x] Streamable HTTP transport, stateless, bearer-token auth
+- [x] OAuth 2.1 (RFC 9728 metadata, dynamic registration, PKCE) — connects from claude.ai
+- [ ] Vault hot-reload — the server currently indexes at startup
 - [ ] MCP spec 2026-07-28 wire upgrade (no-handshake core, `server/discover`, cacheable results, Tasks extension) — when the official SDK ships it
 - [ ] Write path: `brain_write` behind MRTR approval (`input_required`)
 - [ ] MCP Apps: skill launcher, review queue, graph explorer (`ui://` templates)
