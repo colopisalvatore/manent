@@ -41,16 +41,29 @@ program
   .option("--http <port>", "serve Streamable HTTP on this port instead of stdio")
   .option("--host <host>", "bind address for --http", "127.0.0.1")
   .option("--token <token>", "bearer token for --http (or env MANENT_HTTP_TOKEN)")
-  .action(async (dir: string, opts: { http?: string; host: string; token?: string }) => {
+  .option(
+    "--era <era>",
+    "protocol era for --http: auto | legacy (handshake revisions) | modern (2026-07-28)",
+    "auto",
+  )
+  .action(async (dir: string, opts: { http?: string; host: string; token?: string; era: string }) => {
     const root = resolve(dir);
     if (!opts.http) {
       await serveStdio(root);
       return;
     }
+    if (!["auto", "legacy", "modern"].includes(opts.era)) {
+      console.error(`--era must be auto, legacy or modern (got "${opts.era}")`);
+      process.exitCode = 1;
+      return;
+    }
     const token = opts.token ?? process.env.MANENT_HTTP_TOKEN ?? "";
-    const port = Number(opts.http);
-    await serveHttp(root, { port, host: opts.host, token });
-    console.log(`manent MCP endpoint: http://${opts.host}:${port}/mcp (bearer auth required)`);
+    await serveHttp(root, {
+      port: Number(opts.http),
+      host: opts.host,
+      token,
+      era: opts.era as "auto" | "legacy" | "modern",
+    });
   });
 
 await program.parseAsync();

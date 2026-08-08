@@ -1,7 +1,8 @@
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import { createHash, timingSafeEqual } from "node:crypto";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { buildBrainServer, loadBrainContext } from "./index.js";
+import { loadBrainContext } from "./context.js";
+import { LEGACY_VERSIONS, serveLegacyHttp } from "./legacy.js";
+import { handleModernRequest, isModernRequest, MODERN_VERSIONS } from "./modern.js";
 import { handleOAuth, verifyAccessToken } from "./oauth.js";
 
 export interface HttpOptions {
@@ -12,6 +13,11 @@ export interface HttpOptions {
   token: string;
   /** extra hosts allowed as OAuth redirect targets (claude.ai is allowed by default) */
   allowedRedirectHosts?: string[];
+  /**
+   * Pin the protocol era instead of detecting it per request:
+   * "legacy" (handshake, SDK) or "modern" (2026-07-28, native). Default "auto".
+   */
+  era?: "auto" | "legacy" | "modern";
 }
 
 /** Public origin as seen by the client, honouring the tunnel/proxy headers. */
@@ -24,30 +30,6 @@ function externalOrigin(req: IncomingMessage): string {
 const sha = (s: string) => createHash("sha256").update(s, "utf8").digest();
 const safeEqual = (a: string, b: string) => timingSafeEqual(sha(a), sha(b));
 
-/** Revisions the official SDK speaks today (handshake-based, "legacy" era). */
-const LEGACY_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26"] as const;
-
-/**
- * True when the request is written in the modern, handshake-free era
- * (2026-07-28+) and therefore cannot be served by the legacy SDK path.
- *
- * The `Mcp-Method` header is NOT a signal on its own: dual-era clients
- * (claude.ai among them) send it alongside a legacy `initialize`. Treating it
- * as proof of a modern request rejected their handshake with 400 and left the
- * connector authenticated but toolless. Only an explicitly modern RPC or a
- * declared 2026+ protocol version qualifies.
- */
-function isModernRequest(_req: IncomingMessage, body: unknown): boolean {
-  if (!body || typeof body !== "object") return false;
-  const b = body as Record<string, unknown>;
-  if (b.method === "initialize") return false; // legacy by definition
-  if (b.method === "server/discover" || b.method === "subscriptions/listen") return true;
-  const params = (b.params ?? {}) as Record<string, unknown>;
-  const meta = { ...((b._meta as object) ?? {}), ...((params._meta as object) ?? {}) } as Record<string, unknown>;
-  const declared = meta["io.modelcontextprotocol/protocolVersion"];
-  return typeof declared === "string" && declared >= "2026-";
-}
-
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {
   if (req.method !== "POST") return undefined;
   const chunks: Buffer[] = [];
@@ -57,21 +39,27 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
 }
 
 /**
- * Streamable HTTP endpoint over a vault. Stateless by design: one transport
- * per request, shared read-only brain context, JSON responses (no SSE
- * buffering issues behind tunnels/proxies).
+ * Streamable HTTP endpoint over a vault, serving two distinct protocol eras.
+ *
+ * The eras are separate implementations, not a blend: `./modern.ts` implements
+ * revision 2026-07-28 natively (no handshake, no sessions, `resultType` and
+ * caching hints), while `./legacy.ts` serves the handshake revisions through
+ * the official SDK. This router only decides which one answers a request; the
+ * tool definitions they share live in `./tools.ts`, so the two can never
+ * expose different capabilities.
  *
  * Auth, two accepted forms:
- *   1. `Authorization: Bearer <token>` header (preferred)
- *   2. `/t/<token>/mcp` path prefix — fallback for clients that cannot set
- *      headers. A capability URL is a credential: treat it like a password,
- *      rotate by restarting with a new token.
+ *   1. `Authorization: Bearer <token>` — the vault token or an OAuth-issued one
+ *   2. `/t/<token>/mcp` path prefix, for clients that can set neither headers
+ *      nor complete OAuth. A capability URL is a credential: treat it like a
+ *      password and rotate by restarting with a new token.
  */
 export async function serveHttp(root: string, opts: HttpOptions): Promise<Server> {
   if (!opts.token || opts.token.length < 16) {
     throw new Error("http mode requires a token of at least 16 chars (--token or MANENT_HTTP_TOKEN)");
   }
   const ctx = await loadBrainContext(root);
+  const pinned = opts.era ?? "auto";
 
   const httpServer = createServer(async (req, res) => {
     try {
@@ -81,9 +69,10 @@ export async function serveHttp(root: string, opts: HttpOptions): Promise<Server
       // Request log — tokens in the path are masked. Without this, diagnosing
       // a client that "cannot reach the server" is pure guesswork.
       const shown = path.replace(/^\/t\/[^/]+/, "/t/***");
+      let era = "-";
       res.on("finish", () => {
         console.log(
-          `${req.method} ${shown} → ${res.statusCode}  ua=${req.headers["user-agent"] ?? "-"}  accept=${req.headers.accept ?? "-"}`,
+          `${req.method} ${shown} → ${res.statusCode}  era=${era}  ua=${req.headers["user-agent"] ?? "-"}  accept=${req.headers.accept ?? "-"}`,
         );
       });
 
@@ -93,7 +82,8 @@ export async function serveHttp(root: string, opts: HttpOptions): Promise<Server
         res.writeHead(204, {
           "access-control-allow-origin": req.headers.origin ?? "*",
           "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
-          "access-control-allow-headers": "content-type, authorization, accept, mcp-protocol-version, mcp-session-id",
+          "access-control-allow-headers":
+            "content-type, authorization, accept, mcp-protocol-version, mcp-session-id, mcp-method, mcp-name",
           "access-control-max-age": "86400",
         });
         res.end();
@@ -145,46 +135,36 @@ export async function serveHttp(root: string, opts: HttpOptions): Promise<Server
       }
 
       const body = await readJsonBody(req);
-      if (body && typeof body === "object") {
-        const b = body as Record<string, unknown>;
-        const params = (b.params ?? {}) as Record<string, unknown>;
-        const meta = (b._meta ?? params._meta ?? {}) as Record<string, unknown>;
-        console.log(
-          `  rpc method=${String(b.method)} protocolVersion=${String(
-            params.protocolVersion ?? meta["io.modelcontextprotocol/protocolVersion"] ?? "-",
-          )} mcpMethodHeader=${String(req.headers["mcp-method"] ?? "-")}`,
-        );
+
+      // ── Era routing: exactly one implementation answers ──────────────────
+      const useModern = pinned === "modern" || (pinned === "auto" && isModernRequest(body));
+      era = useModern ? "modern" : "legacy";
+
+      if (useModern) {
+        const response = handleModernRequest(body, ctx);
+        if (!response) {
+          res.writeHead(202).end(); // notification: accepted, nothing to return
+          return;
+        }
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify(response));
+        return;
       }
-      // Backward-compatibility signal for modern (2026-07-28+) clients.
-      // This server speaks the legacy, handshake-based revisions via the
-      // official SDK. Per the spec's HTTP fallback rule, a modern client
-      // falls back to `initialize` when a modern request returns 4xx with no
-      // recognized modern error body — a 200 carrying "Method not found"
-      // instead reads as an unusable server.
-      if (isModernRequest(req, body)) {
+
+      // Legacy path. When the era is pinned to legacy, a modern request gets the
+      // 4xx-without-modern-error-body that makes dual-era clients fall back.
+      if (pinned === "legacy" && isModernRequest(body)) {
         res.writeHead(400, { "content-type": "application/json" });
         res.end(
           JSON.stringify({
             error: "legacy_protocol_only",
-            message:
-              "This server implements the initialize-handshake protocol revisions. Retry with the legacy initialize flow.",
+            message: "This endpoint is pinned to the initialize-handshake revisions.",
             supportedVersions: LEGACY_VERSIONS,
           }),
         );
         return;
       }
-
-      const server = buildBrainServer(ctx);
-      const transport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: undefined, // stateless
-        enableJsonResponse: true,
-      });
-      res.on("close", () => {
-        void transport.close();
-        void server.close();
-      });
-      await server.connect(transport);
-      await transport.handleRequest(req, res, body);
+      await serveLegacyHttp(req, res, body, ctx);
     } catch {
       if (!res.headersSent) {
         res.writeHead(500, { "content-type": "application/json" });
@@ -195,5 +175,8 @@ export async function serveHttp(root: string, opts: HttpOptions): Promise<Server
 
   const host = opts.host ?? "127.0.0.1";
   await new Promise<void>((resolve) => httpServer.listen(opts.port, host, resolve));
+  console.log(
+    `manent MCP endpoint on http://${host}:${opts.port}/mcp — era=${pinned} (legacy ${LEGACY_VERSIONS.join(", ")} | modern ${MODERN_VERSIONS.join(", ")}), auth required`,
+  );
   return httpServer;
 }
