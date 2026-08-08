@@ -100,6 +100,16 @@ export async function serveHttp(root: string, opts: HttpOptions): Promise<Server
       }
 
       const body = await readJsonBody(req);
+      if (body && typeof body === "object") {
+        const b = body as Record<string, unknown>;
+        const params = (b.params ?? {}) as Record<string, unknown>;
+        const meta = (b._meta ?? params._meta ?? {}) as Record<string, unknown>;
+        console.log(
+          `  rpc method=${String(b.method)} protocolVersion=${String(
+            params.protocolVersion ?? meta["io.modelcontextprotocol/protocolVersion"] ?? "-",
+          )} mcpMethodHeader=${String(req.headers["mcp-method"] ?? "-")}`,
+        );
+      }
       const server = buildBrainServer(ctx);
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined, // stateless
