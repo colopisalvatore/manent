@@ -2,7 +2,7 @@
 import { resolve } from "node:path";
 import { Command } from "commander";
 import { formatFindings, lintVault } from "@manent/lint";
-import { serveStdio } from "@manent/server";
+import { serveHttp, serveStdio } from "@manent/server";
 import { initVault } from "./init.js";
 
 const program = new Command();
@@ -36,10 +36,21 @@ program
 
 program
   .command("serve")
-  .description("serve the vault over MCP (stdio transport)")
+  .description("serve the vault over MCP — stdio by default, Streamable HTTP with --http")
   .argument("[dir]", "vault directory", ".")
-  .action(async (dir: string) => {
-    await serveStdio(resolve(dir));
+  .option("--http <port>", "serve Streamable HTTP on this port instead of stdio")
+  .option("--host <host>", "bind address for --http", "127.0.0.1")
+  .option("--token <token>", "bearer token for --http (or env MANENT_HTTP_TOKEN)")
+  .action(async (dir: string, opts: { http?: string; host: string; token?: string }) => {
+    const root = resolve(dir);
+    if (!opts.http) {
+      await serveStdio(root);
+      return;
+    }
+    const token = opts.token ?? process.env.MANENT_HTTP_TOKEN ?? "";
+    const port = Number(opts.http);
+    await serveHttp(root, { port, host: opts.host, token });
+    console.log(`manent MCP endpoint: http://${opts.host}:${port}/mcp (bearer auth required)`);
   });
 
 await program.parseAsync();

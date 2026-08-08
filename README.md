@@ -39,6 +39,9 @@ node packages/cli/dist/index.js lint my-vault
 
 # serve it over MCP (stdio)
 node packages/cli/dist/index.js serve my-vault
+
+# or over Streamable HTTP with bearer auth (for remote clients / claude.ai)
+node packages/cli/dist/index.js serve my-vault --http 3939 --token <long-random-token>
 ```
 
 Register with Claude Code:
@@ -46,6 +49,18 @@ Register with Claude Code:
 ```
 claude mcp add mybrain -- node <repo>/packages/cli/dist/index.js serve <vault>
 ```
+
+### Use from claude.ai (web)
+
+1. Serve over HTTP (above) and expose it, e.g. `cloudflared tunnel --url http://127.0.0.1:3939`.
+2. claude.ai → Settings → Connectors → Add custom connector → URL `https://<your-host>/mcp`.
+3. Auth: add a request header `Authorization: Bearer <token>` (beta feature). If your account
+   doesn't have request headers yet, use the capability-URL fallback:
+   `https://<your-host>/t/<token>/mcp` — that URL **is** a credential; treat it like a password
+   and rotate it by restarting with a new token.
+
+The HTTP endpoint binds `127.0.0.1` by default and refuses to start without a token — a vault
+never goes on the network unauthenticated by accident.
 
 ## Vault layout (see `packages/spec/SPEC.md`)
 
@@ -71,7 +86,8 @@ vault/
 - [ ] Scoring: relevance × recency-decay × importance (Generative Agents model)
 - [ ] Curation: embedding-cluster dedup, contradiction detection, Leiden community → MOC suggestions
 - [ ] Eval harness: golden set, recall@k / MRR, CI regression gate
-- [ ] Streamable HTTP transport + MCP spec 2026-07-28 (stateless core, cacheable resources, Tasks extension)
+- [x] Streamable HTTP transport, stateless, bearer-token auth
+- [ ] MCP spec 2026-07-28 wire upgrade (no-handshake core, `server/discover`, cacheable results, Tasks extension) — when the official SDK ships it
 - [ ] Write path: `brain_write` behind MRTR approval (`input_required`)
 - [ ] MCP Apps: skill launcher, review queue, graph explorer (`ui://` templates)
 

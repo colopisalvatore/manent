@@ -1,16 +1,26 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import type MiniSearch from "minisearch";
 import { z } from "zod";
-import { buildGraph, loadVault, neighbors } from "@manent/core";
-import { buildSearchIndex } from "./search.js";
+import { buildGraph, loadVault, neighbors, type Graph, type Note } from "@manent/core";
+import { buildSearchIndex, type SearchDoc } from "./search.js";
 
 export { buildSearchIndex } from "./search.js";
+export { serveHttp, type HttpOptions } from "./http.js";
 
-export async function createBrainServer(root: string): Promise<McpServer> {
+export interface BrainContext {
+  notes: Note[];
+  graph: Graph;
+  index: MiniSearch<SearchDoc>;
+}
+
+export async function loadBrainContext(root: string): Promise<BrainContext> {
   const notes = await loadVault(root);
-  const graph = buildGraph(notes);
-  const index = buildSearchIndex(notes);
+  return { notes, graph: buildGraph(notes), index: buildSearchIndex(notes) };
+}
 
+export function buildBrainServer(ctx: BrainContext): McpServer {
+  const { graph, index } = ctx;
   const server = new McpServer({ name: "manent", version: "0.0.1" });
 
   server.registerTool(
@@ -75,6 +85,10 @@ export async function createBrainServer(root: string): Promise<McpServer> {
   );
 
   return server;
+}
+
+export async function createBrainServer(root: string): Promise<McpServer> {
+  return buildBrainServer(await loadBrainContext(root));
 }
 
 export async function serveStdio(root: string): Promise<void> {
