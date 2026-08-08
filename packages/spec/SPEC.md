@@ -24,6 +24,8 @@ vault/
 
 Directories are conventions, not constraints — notes may live anywhere except that tools MUST honor `secrets/` (and any dir listed in `FORBIDDEN_DIRS`) as a hard exclusion at every layer: sync, index, serve.
 
+An optional `.manentignore` file at the vault root excludes additional paths from loading, linting and serving: one vault-relative path prefix per line, `#` comments, no globs. Use it for read-only mirrors (`knowledge/`), raw corpora, git submodules — content that lives in the vault but is not conforming notes. `secrets/` stays excluded whether listed or not.
+
 ## 3. Note contract
 
 One note = one file = one atomic fact/entity/lesson. YAML frontmatter validated against `schemas/note-base.schema.json`:

@@ -6,14 +6,37 @@ import type { Note } from "./types.js";
 
 const SKIP_DIRS = new Set([".git", ".obsidian", "node_modules", ...FORBIDDEN_DIRS]);
 
-export async function listMarkdownFiles(root: string): Promise<string[]> {
+/**
+ * Reads `.manentignore` at the vault root: one path prefix per line,
+ * `#` comments. Matching is plain prefix on vault-relative paths — no globs.
+ * Used to exclude read-only mirrors, raw corpora and submodules from
+ * loading, linting and serving. `secrets/` is always excluded regardless.
+ */
+export async function readVaultIgnore(root: string): Promise<string[]> {
+  try {
+    const raw = await readFile(join(root, ".manentignore"), "utf8");
+    return raw
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0 && !l.startsWith("#"))
+      .map((l) => l.replace(/\\/g, "/").replace(/\/+$/, ""));
+  } catch {
+    return [];
+  }
+}
+
+export async function listMarkdownFiles(root: string, ignore: string[] = []): Promise<string[]> {
   const out: string[] = [];
+  const ignored = (rel: string) =>
+    ignore.some((p) => rel === p || rel.startsWith(p + "/"));
   async function walk(dir: string): Promise<void> {
     for (const e of await readdir(dir, { withFileTypes: true })) {
+      const p = join(dir, e.name);
+      const rel = relative(root, p).split(sep).join("/");
       if (e.isDirectory()) {
-        if (!SKIP_DIRS.has(e.name)) await walk(join(dir, e.name));
-      } else if (e.name.endsWith(".md")) {
-        out.push(join(dir, e.name));
+        if (!SKIP_DIRS.has(e.name) && !ignored(rel)) await walk(p);
+      } else if (e.name.endsWith(".md") && !ignored(rel)) {
+        out.push(p);
       }
     }
   }
@@ -22,7 +45,8 @@ export async function listMarkdownFiles(root: string): Promise<string[]> {
 }
 
 export async function loadVault(root: string): Promise<Note[]> {
-  const files = await listMarkdownFiles(root);
+  const ignore = await readVaultIgnore(root);
+  const files = await listMarkdownFiles(root, ignore);
   return Promise.all(
     files.map(async (f) =>
       parseNote(await readFile(f, "utf8"), f, relative(root, f).split(sep).join("/")),
