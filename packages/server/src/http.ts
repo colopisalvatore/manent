@@ -44,6 +44,32 @@ export async function serveHttp(root: string, opts: HttpOptions): Promise<Server
       const url = new URL(req.url ?? "/", "http://localhost");
       let path = url.pathname;
 
+      // Request log — tokens in the path are masked. Without this, diagnosing
+      // a client that "cannot reach the server" is pure guesswork.
+      const shown = path.replace(/^\/t\/[^/]+/, "/t/***");
+      res.on("finish", () => {
+        console.log(
+          `${req.method} ${shown} → ${res.statusCode}  ua=${req.headers["user-agent"] ?? "-"}  accept=${req.headers.accept ?? "-"}`,
+        );
+      });
+
+      // Browser-side clients preflight before posting; a 405 there reads as
+      // "server unreachable".
+      if (req.method === "OPTIONS") {
+        res.writeHead(204, {
+          "access-control-allow-origin": req.headers.origin ?? "*",
+          "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
+          "access-control-allow-headers": "content-type, authorization, accept, mcp-protocol-version, mcp-session-id",
+          "access-control-max-age": "86400",
+        });
+        res.end();
+        return;
+      }
+      if (req.headers.origin) {
+        res.setHeader("access-control-allow-origin", req.headers.origin);
+        res.setHeader("access-control-expose-headers", "mcp-session-id");
+      }
+
       // Discovery probes must answer in the clear: a 401 here makes clients
       // (claude.ai) assume OAuth is available and attempt registration, which
       // then fails. A plain 404 tells them this server has no OAuth.
