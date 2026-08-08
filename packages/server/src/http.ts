@@ -44,6 +44,15 @@ export async function serveHttp(root: string, opts: HttpOptions): Promise<Server
       const url = new URL(req.url ?? "/", "http://localhost");
       let path = url.pathname;
 
+      // Discovery probes must answer in the clear: a 401 here makes clients
+      // (claude.ai) assume OAuth is available and attempt registration, which
+      // then fails. A plain 404 tells them this server has no OAuth.
+      if (path.startsWith("/.well-known/") || path === "/register") {
+        res.writeHead(404, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: "no OAuth on this server — use bearer token or /t/<token>/mcp" }));
+        return;
+      }
+
       let provided: string | undefined;
       const auth = req.headers.authorization;
       if (auth?.startsWith("Bearer ")) provided = auth.slice("Bearer ".length).trim();
