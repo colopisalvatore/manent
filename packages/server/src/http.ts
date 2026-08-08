@@ -29,13 +29,18 @@ const LEGACY_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26"] as const;
 
 /**
  * True when the request is written in the modern, handshake-free era
- * (2026-07-28+): the `server/discover` RPC, per-request protocol metadata,
- * or the transport headers that revision made mandatory.
+ * (2026-07-28+) and therefore cannot be served by the legacy SDK path.
+ *
+ * The `Mcp-Method` header is NOT a signal on its own: dual-era clients
+ * (claude.ai among them) send it alongside a legacy `initialize`. Treating it
+ * as proof of a modern request rejected their handshake with 400 and left the
+ * connector authenticated but toolless. Only an explicitly modern RPC or a
+ * declared 2026+ protocol version qualifies.
  */
-function isModernRequest(req: IncomingMessage, body: unknown): boolean {
-  if (req.headers["mcp-method"] !== undefined) return true;
+function isModernRequest(_req: IncomingMessage, body: unknown): boolean {
   if (!body || typeof body !== "object") return false;
   const b = body as Record<string, unknown>;
+  if (b.method === "initialize") return false; // legacy by definition
   if (b.method === "server/discover" || b.method === "subscriptions/listen") return true;
   const params = (b.params ?? {}) as Record<string, unknown>;
   const meta = { ...((b._meta as object) ?? {}), ...((params._meta as object) ?? {}) } as Record<string, unknown>;

@@ -13,7 +13,8 @@
     "build": "tsc -b packages/spec packages/core packages/lint packages/server packages/cli",
     "smoke": "node scripts/smoke.mjs",
     "probe": "node scripts/mcp-probe.mjs",
-    "test:oauth": "node scripts/oauth-test.mjs"
+    "test:oauth": "node scripts/oauth-test.mjs",
+    "test:era": "node scripts/era-test.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",
