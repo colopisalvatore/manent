@@ -1,0 +1,21 @@
+{
+  "name": "manent",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -b packages/spec packages/core packages/lint packages/server packages/cli",
+    "smoke": "node scripts/smoke.mjs",
+    "probe": "node scripts/mcp-probe.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "typescript": "^5.5.4"
+  }
+}

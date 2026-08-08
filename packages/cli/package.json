@@ -1,0 +1,19 @@
+{
+  "name": "@manent/cli",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "manent": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@manent/core": "*",
+    "@manent/lint": "*",
+    "@manent/server": "*",
+    "commander": "^12.1.0"
+  }
+}

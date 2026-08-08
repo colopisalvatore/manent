@@ -1,0 +1,20 @@
+{
+  "name": "@manent/server",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./search": "./dist/search.js"
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.17.0",
+    "@manent/core": "*",
+    "minisearch": "^7.1.0",
+    "zod": "^3.23.8"
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://manent.dev/schemas/note-base.schema.json",
+  "title": "Manent note frontmatter (base contract)",
+  "type": "object",
+  "required": ["name", "description", "type"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:[_-][a-z0-9]+)*$",
+      "description": "Canonical slug. Wikilink target. Must match the filename (without .md)."
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300,
+      "description": "One line. Used by retrieval to decide relevance without opening the note."
+    },
+    "type": {
+      "enum": [
+        "feedback",
+        "reference",
+        "project",
+        "wiki-entity",
+        "wiki-concept",
+        "raw-source",
+        "persona",
+        "handoff",
+        "retro",
+        "moc",
+        "index"
+      ]
+    },
+    "created": { "type": "string", "format": "date" },
+    "updated": { "type": "string", "format": "date" },
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "provenance": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Names of raw-source notes this note was synthesized from."
+    },
+    "supersedes": { "type": "array", "items": { "type": "string" } },
+    "contradicts": { "type": "array", "items": { "type": "string" } },
+    "confidence": { "enum": ["high", "medium", "low"] },
+    "status": { "enum": ["active", "deprecated", "archived"] }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,17 @@
+{
+  "name": "@manent/core",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@manent/spec": "*",
+    "gray-matter": "^4.0.3"
+  }
+}
