@@ -12,7 +12,8 @@
   "scripts": {
     "build": "tsc -b packages/spec packages/core packages/lint packages/server packages/cli",
     "smoke": "node scripts/smoke.mjs",
-    "probe": "node scripts/mcp-probe.mjs"
+    "probe": "node scripts/mcp-probe.mjs",
+    "test:oauth": "node scripts/oauth-test.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",
