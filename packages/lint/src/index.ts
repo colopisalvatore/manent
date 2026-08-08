@@ -56,6 +56,16 @@ export async function lintVault(root: string, opts: LintOptions = {}): Promise<L
     const name = noteName(n);
     const fm = normalizeFrontmatter(n.frontmatter);
 
+    if (n.parseError) {
+      findings.push({
+        rule: "frontmatter-invalid",
+        severity: "error",
+        path: n.relPath,
+        message: `YAML frontmatter could not be parsed: ${n.parseError} — values containing ": " must be quoted`,
+      });
+      continue;
+    }
+
     if (Object.keys(fm).length === 0) {
       findings.push({
         rule: "frontmatter-missing",
