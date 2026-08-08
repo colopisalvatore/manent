@@ -22,7 +22,7 @@ Agent memory today is either a proprietary vector-DB dump (lock-in, no audit tra
 | `@manent/spec` | The vault specification: note types, frontmatter schemas, typed edges, layout |
 | `@manent/core` | Parser (frontmatter + wikilinks), vault loader, graph builder |
 | `@manent/lint` | Rule engine: schema-lint, link-lint, duplicate/orphan detection |
-| `@manent/server` | MCP server over a vault: `brain_search`, `brain_read`, `brain_neighbors` |
+| `@manent/server` | MCP server over a vault: `brain_search`, `brain_read`, `brain_neighbors` — see [Protocol eras](#protocol-eras) |
 | `@manent/cli` | `manent init | lint | serve` |
 
 ## Quickstart
@@ -77,6 +77,30 @@ Three details worth knowing:
 Run `npm run test:oauth` to exercise the whole flow, including wrong token, failed PKCE, code
 replay, forged token and disallowed redirect.
 
+## Protocol eras
+
+MCP revision `2026-07-28` removed the `initialize` handshake and sessions; every shipping client
+still speaks the older, handshake-based revisions. Manent serves **both, as two separate
+implementations** rather than one blended path:
+
+| Era | Revisions | How | File |
+|---|---|---|---|
+| legacy | `2025-11-25`, `2025-06-18`, `2025-03-26` | official SDK, `initialize` handshake | `src/legacy.ts` |
+| modern | `2026-07-28` | native: no handshake, `resultType`, caching hints, `server/discover` | `src/modern.ts` |
+
+Both adapters expose the same tools because the tool definitions live in one place
+(`src/tools.ts`); the eras cannot drift in capability. `src/http.ts` only routes.
+
+```
+manent serve <vault> --http 3939            # auto: routes each request to its era
+manent serve <vault> --http 3939 --era legacy   # pin: modern requests get the fallback signal
+manent serve <vault> --http 3939 --era modern   # pin: 2026-07-28 only
+```
+
+Auto-detection keys on the RPC itself (`server/discover`, `subscriptions/listen`) or a declared
+2026+ protocol version — never on the `Mcp-Method` transport header alone, since dual-era clients
+send it with a legacy `initialize` too. `npm run test:era` exercises all three modes.
+
 ## Vault layout (see `packages/spec/SPEC.md`)
 
 ```
@@ -103,7 +127,10 @@ vault/
 - [ ] Eval harness: golden set, recall@k / MRR, CI regression gate
 - [x] Streamable HTTP transport, stateless, bearer-token auth
 - [x] OAuth 2.1 (RFC 9728 metadata, dynamic registration, PKCE) — connects from claude.ai
+- [x] Two protocol eras as separate implementations: legacy handshake (SDK) and native 2026-07-28
 - [ ] Vault hot-reload — the server currently indexes at startup
+- [ ] Tasks extension (`io.modelcontextprotocol/tasks`) on the modern path — long-running skills
+- [ ] MCP Apps (`ui://`): skill launcher, review queue, graph explorer
 - [ ] MCP spec 2026-07-28 wire upgrade (no-handshake core, `server/discover`, cacheable results, Tasks extension) — when the official SDK ships it
 - [ ] Write path: `brain_write` behind MRTR approval (`input_required`)
 - [ ] MCP Apps: skill launcher, review queue, graph explorer (`ui://` templates)
