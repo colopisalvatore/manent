@@ -19,7 +19,8 @@
     "eval:gate": "node packages/cli/dist/index.js eval \"./vault\" --golden eval/golden-aios.json --retriever bm25 --baseline eval/baseline-bm25.json",
     "tune": "node scripts/tune-retrieval.mjs",
     "eval:fused": "node packages/cli/dist/index.js eval \"./vault\" --golden eval/golden-aios.json --retriever fused",
-    "tune:fusion": "node scripts/tune-fusion.mjs"
+    "tune:fusion": "node scripts/tune-fusion.mjs",
+    "test:warmup": "node scripts/warmup-test.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",
