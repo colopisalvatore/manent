@@ -17,7 +17,11 @@ export interface Hit {
  */
 export interface Retriever {
   readonly name: string;
-  search(query: string, k?: number): Hit[];
+  /**
+   * May be synchronous (lexical, graph) or asynchronous (dense models need to
+   * embed the query first). Callers await either way.
+   */
+  search(query: string, k?: number): Hit[] | Promise<Hit[]>;
 }
 
 export interface RetrievalInput {

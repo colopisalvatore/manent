@@ -24,7 +24,7 @@ export interface BrainTool {
   inputSchemaJson: Record<string, unknown>;
   /** same contract expressed for the SDK's Zod-based registration */
   inputSchemaZod: ZodRawShape;
-  run(args: Record<string, unknown>, ctx: BrainContext): ToolResult;
+  run(args: Record<string, unknown>, ctx: BrainContext): ToolResult | Promise<ToolResult>;
 }
 
 const text = (value: unknown): ToolResult => ({
@@ -49,10 +49,10 @@ export const BRAIN_TOOLS: BrainTool[] = [
       query: z.string().describe("free-text query"),
       k: z.number().int().min(1).max(50).optional().describe("max results, default 8"),
     },
-    run(args, ctx) {
+    async run(args, ctx) {
       const query = String(args.query ?? "");
       const k = typeof args.k === "number" ? args.k : 8;
-      return text(ctx.retriever.search(query, k));
+      return text(await ctx.retriever.search(query, k));
     },
   },
   {

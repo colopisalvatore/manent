@@ -1,6 +1,14 @@
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { buildGraph, loadVault } from "@manent/core";
-import { bm25Retriever, hybridRetriever, type Retriever } from "@manent/retrieval";
+import {
+  bm25Retriever,
+  buildDenseIndex,
+  denseRetriever,
+  fusedRetriever,
+  hybridRetriever,
+  loadLocalEmbeddingModel,
+  type Retriever,
+} from "@manent/retrieval";
 import {
   compareReports,
   deriveAutoQueries,
@@ -11,6 +19,9 @@ import {
   type EvalReport,
 } from "@manent/eval";
 
+export const RETRIEVERS = ["bm25", "hybrid", "dense", "fused", "both", "all"] as const;
+export type RetrieverChoice = (typeof RETRIEVERS)[number];
+
 export interface EvalCliOptions {
   golden?: string;
   auto: boolean;
@@ -19,9 +30,13 @@ export interface EvalCliOptions {
   worst: number;
   save?: string;
   baseline?: string;
+  model?: string;
 }
 
-const RETRIEVERS = ["bm25", "hybrid", "both"] as const;
+const EXPAND: Record<string, string[]> = {
+  both: ["bm25", "hybrid"],
+  all: ["bm25", "dense", "fused"],
+};
 
 export async function runEvalCommand(root: string, opts: EvalCliOptions): Promise<number> {
   const notes = await loadVault(root);
@@ -31,7 +46,7 @@ export async function runEvalCommand(root: string, opts: EvalCliOptions): Promis
   if (opts.golden) {
     const set = await loadGoldenSet(opts.golden);
     queries.push(...set.queries);
-    console.log(`golden set "${set.name}": ${set.queries.length} curated queries`);
+    console.log(`golden set "${set.name}": ${set.queries.length} hand-written queries`);
   }
   if (opts.auto) {
     const auto = deriveAutoQueries(notes);
@@ -43,27 +58,59 @@ export async function runEvalCommand(root: string, opts: EvalCliOptions): Promis
     return 1;
   }
 
-  const build = (name: string): Retriever =>
-    name === "bm25" ? bm25Retriever(notes) : hybridRetriever({ notes, graph });
+  const names = EXPAND[opts.retriever] ?? [opts.retriever];
 
-  const names = opts.retriever === "both" ? ["bm25", "hybrid"] : [opts.retriever];
+  // Embeddings are loaded once and shared: the model costs ~17s to load and the
+  // index is cached on disk, so a second dense-based retriever is nearly free.
+  let dense: Awaited<ReturnType<typeof buildDenseIndex>> | undefined;
+  if (names.some((n) => n === "dense" || n === "fused")) {
+    const model = await loadLocalEmbeddingModel({ modelId: opts.model });
+    console.log(`embedding model: ${model.id}`);
+    dense = await buildDenseIndex(notes, model, {
+      root,
+      onProgress: (done, total) => {
+        if (done === total || done % 64 === 0) console.log(`  embedded ${done}/${total}`);
+      },
+    });
+    console.log(`dense index: ${dense.vectors.size} notes (${dense.embedded} embedded, ${dense.reused} from cache)`);
+  }
+
+  const build = (name: string): Retriever => {
+    switch (name) {
+      case "bm25":
+        return bm25Retriever(notes);
+      case "hybrid":
+        return hybridRetriever({ notes, graph });
+      case "dense":
+        if (!dense) throw new Error("dense index unavailable");
+        return denseRetriever(dense);
+      case "fused":
+        if (!dense) throw new Error("dense index unavailable");
+        return fusedRetriever(notes, dense);
+      default:
+        throw new Error(`unknown retriever: ${name}`);
+    }
+  };
+
   const reports: EvalReport[] = [];
   for (const name of names) {
-    const report = runEval(build(name), queries, opts.depth);
+    const report = await runEval(build(name), queries, opts.depth);
     reports.push(report);
     console.log("");
     console.log(formatReport(report, { worst: opts.worst }));
   }
 
-  // Two retrievers in one run: show what the second changes versus the first.
-  if (reports.length === 2) {
+  // Every extra retriever is compared against the first one listed.
+  for (let i = 1; i < reports.length; i++) {
     console.log("");
-    console.log(`delta ${reports[1].retriever} vs ${reports[0].retriever}:`);
-    const diffs = compareReports(reports[0], reports[1]);
+    console.log(`delta ${reports[i].retriever} vs ${reports[0].retriever}:`);
+    const diffs = compareReports(reports[0], reports[i]);
     if (diffs.length === 0) console.log("  no metric moved beyond tolerance");
     for (const d of diffs) {
       const sign = d.delta > 0 ? "+" : "";
-      console.log(`  ${d.metric.padEnd(8)} ${(d.before * 100).toFixed(1)}% → ${(d.after * 100).toFixed(1)}%  (${sign}${(d.delta * 100).toFixed(1)} pts)`);
+      console.log(
+        `  ${d.metric.padEnd(8)} ${(d.before * 100).toFixed(1)}% → ${(d.after * 100).toFixed(1)}%  (${sign}${(d.delta * 100).toFixed(1)} pts)`,
+      );
     }
   }
 
@@ -73,11 +120,9 @@ export async function runEvalCommand(root: string, opts: EvalCliOptions): Promis
     console.log(`\nreport saved: ${opts.save}`);
   }
 
-  // Regression gate: fail the run if any metric dropped against a saved report.
   if (opts.baseline) {
-    const baseline = JSON.parse(await (await import("node:fs/promises")).readFile(opts.baseline, "utf8")) as EvalReport;
-    const diffs = compareReports(baseline, last);
-    const worse = diffs.filter((d) => d.delta < 0);
+    const baseline = JSON.parse(await readFile(opts.baseline, "utf8")) as EvalReport;
+    const worse = compareReports(baseline, last).filter((d) => d.delta < 0);
     console.log("");
     if (worse.length === 0) {
       console.log(`no regression against ${opts.baseline}`);
@@ -91,5 +136,3 @@ export async function runEvalCommand(root: string, opts: EvalCliOptions): Promis
   }
   return 0;
 }
-
-export { RETRIEVERS };

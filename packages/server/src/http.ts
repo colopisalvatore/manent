@@ -18,8 +18,10 @@ export interface HttpOptions {
    * "legacy" (handshake, SDK) or "modern" (2026-07-28, native). Default "auto".
    */
   era?: "auto" | "legacy" | "modern";
-  /** ranking strategy: "bm25" (default, measured best) or "hybrid" */
+  /** ranking strategy; "fused" scores best but needs the embedding model */
   retriever?: RetrieverName;
+  /** embedding model id for dense/fused */
+  model?: string;
 }
 
 /** Public origin as seen by the client, honouring the tunnel/proxy headers. */
@@ -60,7 +62,7 @@ export async function serveHttp(root: string, opts: HttpOptions): Promise<Server
   if (!opts.token || opts.token.length < 16) {
     throw new Error("http mode requires a token of at least 16 chars (--token or MANENT_HTTP_TOKEN)");
   }
-  const ctx = await loadBrainContext(root, { retriever: opts.retriever });
+  const ctx = await loadBrainContext(root, { retriever: opts.retriever, model: opts.model });
   const pinned = opts.era ?? "auto";
 
   const httpServer = createServer(async (req, res) => {
@@ -143,7 +145,7 @@ export async function serveHttp(root: string, opts: HttpOptions): Promise<Server
       era = useModern ? "modern" : "legacy";
 
       if (useModern) {
-        const response = handleModernRequest(body, ctx);
+        const response = await handleModernRequest(body, ctx);
         if (!response) {
           res.writeHead(202).end(); // notification: accepted, nothing to return
           return;

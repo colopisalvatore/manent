@@ -64,7 +64,10 @@ const withMeta = (result: Record<string, unknown>): Record<string, unknown> => (
   _meta: { [SERVER_INFO_KEY]: SERVER_INFO },
 });
 
-export function handleModernRequest(body: unknown, ctx: BrainContext): JsonRpcResponse | undefined {
+export async function handleModernRequest(
+  body: unknown,
+  ctx: BrainContext,
+): Promise<JsonRpcResponse | undefined> {
   if (!body || typeof body !== "object") {
     return { jsonrpc: "2.0", id: null, error: { code: INVALID_PARAMS, message: "expected a JSON-RPC object" } };
   }
@@ -129,7 +132,7 @@ export function handleModernRequest(body: unknown, ctx: BrainContext): JsonRpcRe
         };
       }
       const args = (params.arguments ?? {}) as Record<string, unknown>;
-      const out = tool.run(args, ctx);
+      const out = await tool.run(args, ctx);
       return {
         jsonrpc: "2.0",
         id,

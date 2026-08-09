@@ -20,7 +20,7 @@ export function buildLegacyServer(ctx: BrainContext): McpServer {
     server.registerTool(
       tool.name,
       { description: tool.description, inputSchema: tool.inputSchemaZod },
-      async (args: Record<string, unknown>) => tool.run(args, ctx),
+      async (args: Record<string, unknown>) => await tool.run(args, ctx),
     );
   }
   return server;
@@ -46,11 +46,15 @@ export async function serveLegacyHttp(
   await transport.handleRequest(req, res, body);
 }
 
-export async function createBrainServer(root: string, retriever?: RetrieverName): Promise<McpServer> {
-  return buildLegacyServer(await loadBrainContext(root, { retriever }));
+export async function createBrainServer(
+  root: string,
+  retriever?: RetrieverName,
+  model?: string,
+): Promise<McpServer> {
+  return buildLegacyServer(await loadBrainContext(root, { retriever, model }));
 }
 
-export async function serveStdio(root: string, retriever?: RetrieverName): Promise<void> {
-  const server = await createBrainServer(root, retriever);
+export async function serveStdio(root: string, retriever?: RetrieverName, model?: string): Promise<void> {
+  const server = await createBrainServer(root, retriever, model);
   await server.connect(new StdioServerTransport());
 }

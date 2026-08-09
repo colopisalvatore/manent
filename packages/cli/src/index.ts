@@ -41,7 +41,8 @@ program
   .argument("[dir]", "vault directory", ".")
   .option("--golden <file>", "curated golden set (JSON)")
   .option("--no-auto", "skip queries auto-derived from note descriptions")
-  .option("--retriever <name>", "bm25 | hybrid | both", "both")
+  .option("--retriever <name>", "bm25 | hybrid | dense | fused | both | all", "both")
+  .option("--model <id>", "embedding model for dense/fused (default: multilingual-e5-small)")
   .option("--depth <n>", "how many results to score", "10")
   .option("--worst <n>", "list up to N misses", "5")
   .option("--save <file>", "write the report as JSON")
@@ -49,7 +50,7 @@ program
   .action(
     async (
       dir: string,
-      opts: { golden?: string; auto: boolean; retriever: string; depth: string; worst: string; save?: string; baseline?: string },
+      opts: { golden?: string; auto: boolean; retriever: string; model?: string; depth: string; worst: string; save?: string; baseline?: string },
     ) => {
       if (!RETRIEVERS.includes(opts.retriever as (typeof RETRIEVERS)[number])) {
         console.error(`--retriever must be one of: ${RETRIEVERS.join(", ")}`);
@@ -60,6 +61,7 @@ program
         golden: opts.golden,
         auto: opts.auto,
         retriever: opts.retriever,
+        model: opts.model,
         depth: Number(opts.depth),
         worst: Number(opts.worst),
         save: opts.save,
@@ -81,16 +83,23 @@ program
     "protocol era for --http: auto | legacy (handshake revisions) | modern (2026-07-28)",
     "auto",
   )
-  .option("--retriever <name>", "ranking: bm25 (default) | hybrid (graph expansion)", "bm25")
+  .option("--retriever <name>", "ranking: bm25 (default) | fused (best, needs embedding model) | dense | hybrid", "bm25")
+  .option("--model <id>", "embedding model for dense/fused")
   .action(
     async (
       dir: string,
-      opts: { http?: string; host: string; token?: string; era: string; retriever: string },
+      opts: { http?: string; host: string; token?: string; era: string; retriever: string; model?: string },
     ) => {
     const root = resolve(dir);
-    const retriever = opts.retriever === "hybrid" ? "hybrid" : "bm25";
+    const allowed = ["bm25", "hybrid", "dense", "fused"] as const;
+    if (!allowed.includes(opts.retriever as (typeof allowed)[number])) {
+      console.error(`--retriever must be one of: ${allowed.join(", ")}`);
+      process.exitCode = 1;
+      return;
+    }
+    const retriever = opts.retriever as (typeof allowed)[number];
     if (!opts.http) {
-      await serveStdio(root, retriever);
+      await serveStdio(root, retriever, opts.model);
       return;
     }
     if (!["auto", "legacy", "modern"].includes(opts.era)) {
@@ -105,6 +114,7 @@ program
         token,
         era: opts.era as "auto" | "legacy" | "modern",
         retriever,
+        model: opts.model,
       });
     },
   );
