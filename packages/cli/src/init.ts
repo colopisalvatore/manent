@@ -64,6 +64,7 @@ Feedback notes capture one lesson each: a correction received or an approach tha
 
 const VAULT_GITIGNORE = `secrets/
 .obsidian/workspace*
+.manent/
 `;
 
 export async function initVault(root: string): Promise<string[]> {

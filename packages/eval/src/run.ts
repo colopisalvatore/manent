@@ -17,18 +17,25 @@ export interface EvalReport {
   results: QueryResult[];
 }
 
-export function runEval(retriever: Retriever, queries: EvalQuery[], depth = 10): EvalReport {
-  const results: QueryResult[] = queries.map((q) => {
-    const ranked = retriever.search(q.query, depth).map((h) => h.name);
+export async function runEval(
+  retriever: Retriever,
+  queries: EvalQuery[],
+  depth = 10,
+): Promise<EvalReport> {
+  const results: QueryResult[] = [];
+  for (const q of queries) {
+    // Sequential on purpose: a dense retriever runs a model per query, and
+    // flooding it in parallel makes the numbers noisy rather than faster.
+    const ranked = (await retriever.search(q.query, depth)).map((h) => h.name);
     const i = ranked.findIndex((r) => q.expected.includes(r));
-    return {
+    results.push({
       query: q.query,
       expected: q.expected,
       ranked,
       source: q.source,
       rankOfFirstExpected: i === -1 ? null : i + 1,
-    };
-  });
+    });
+  }
 
   const bySource: Record<string, Scorecard> = {};
   for (const source of new Set(queries.map((q) => q.source))) {

@@ -17,7 +17,9 @@
     "test:era": "node scripts/era-test.mjs",
     "eval": "node packages/cli/dist/index.js eval \"C:/Users/sasi_/Documents/AIOS/brain\" --golden eval/golden-aios.json",
     "eval:gate": "node packages/cli/dist/index.js eval \"C:/Users/sasi_/Documents/AIOS/brain\" --golden eval/golden-aios.json --retriever bm25 --baseline eval/baseline-bm25.json",
-    "tune": "node scripts/tune-retrieval.mjs"
+    "tune": "node scripts/tune-retrieval.mjs",
+    "eval:fused": "node packages/cli/dist/index.js eval \"C:/Users/sasi_/Documents/AIOS/brain\" --golden eval/golden-aios.json --retriever fused",
+    "tune:fusion": "node scripts/tune-fusion.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",

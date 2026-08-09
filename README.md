@@ -21,7 +21,7 @@ Agent memory today is either a proprietary vector-DB dump (lock-in, no audit tra
 |---|---|
 | `@manent/spec` | The vault specification: note types, frontmatter schemas, typed edges, layout |
 | `@manent/core` | Parser (frontmatter + wikilinks), vault loader, graph builder |
-| `@manent/retrieval` | Ranking: BM25 lexical, graph expansion (Personalized PageRank), RRF fusion |
+| `@manent/retrieval` | Ranking: BM25 lexical, local dense embeddings, graph expansion, RRF fusion |
 | `@manent/eval` | Eval harness: golden sets, recall@k / MRR / nDCG, regression gate |
 | `@manent/lint` | Rule engine: schema-lint, link-lint, duplicate/orphan detection |
 | `@manent/server` | MCP server over a vault: `brain_search`, `brain_read`, `brain_neighbors` — see [Protocol eras](#protocol-eras) |
@@ -96,28 +96,51 @@ manent eval <vault> --golden ... --save baseline.json       # record a baseline
 manent eval <vault> --golden ... --baseline baseline.json   # exits 1 if a metric dropped
 ```
 
-Results on a real 305-note vault (298 queries), and what they changed:
+Results on a real 305-note vault (298 queries), in the order they were measured:
 
-| | curated hit@1 | curated MRR | oblique MRR | auto hit@1 |
+| Ranker | curated hit@1 | curated MRR | oblique MRR | auto hit@1 |
 |---|---|---|---|---|
 | BM25, naive tokenizer | 45.0% | 0.621 | — | 97.8% |
-| **BM25 + stopwords, length-gated prefix/fuzzy** | **75.0%** | **0.863** | 0.099 | **97.8%** |
+| BM25 + stopwords, length-gated prefix/fuzzy | 75.0% | 0.863 | 0.099 | **97.8%** |
 | Hybrid (graph expansion + recency + centrality) | 75.0% | 0.863 | 0.104 | 93.0% |
+| Dense only (multilingual-e5-small, local) | 95.0% | 0.975 | 0.131 | 94.4% |
+| **Fused, lexical 1 : dense 2 (RRF)** | **100.0%** | **1.000** | **0.208** | 95.9% |
 
-Three findings worth keeping:
+Four findings worth keeping:
 
-1. **Tokenization was the whole win.** Dropping stopwords and allowing prefix/fuzzy matching only
-   on longer terms moved curated hit@1 by 30 points. With prefix matching on, `di` matches
+1. **Tokenization was the first big win.** Dropping stopwords and allowing prefix/fuzzy matching
+   only on longer terms moved curated hit@1 by 30 points. With prefix matching on, `di` matches
    *diritto*, *disposizione*, *documento* — long notes then win on accumulated noise.
 2. **Graph expansion did not pay.** Once retrieval is lexically sound, Personalized PageRank over
    wikilinks adds nothing measurable and the recency/centrality multipliers cost ~5 points on the
-   auto set. `bm25` is therefore the default; `hybrid` stays available (`--retriever hybrid`) for
-   vaults with a much denser link structure. PPR amplifies a good seed — it cannot create one.
-3. **The real gap is vocabulary mismatch**: `oblique` MRR sits at ~0.10 for both. Notes that never
-   use the query's words are effectively unreachable today. That is the case dense embeddings
-   exist for, and it is the next item on the roadmap — now with a number attached to it.
+   auto set. `hybrid` stays available for vaults with a much denser link structure. PPR amplifies a
+   good seed — it cannot create one.
+3. **Lexical and dense fail in opposite directions, so fusing them beats both.** Dense alone found
+   the notes BM25 missed but blurred exact slugs and identifiers; at equal RRF weights the lexical
+   list pulled correct answers off the top spot. Weighting dense twice reached 100% hit@1 on
+   hand-written queries, trading ~2 points on the synthetic set.
+4. **Vocabulary mismatch is improved, not solved**: `oblique` MRR went 0.099 → 0.208 and recall@5
+   25% → 37.5%. A question whose wording shares nothing with its note is still often unreachable.
+   The likely next step is chunk-level embeddings — notes are currently embedded as one truncated
+   passage, so a long note's specific paragraph gets diluted.
 
-Reproduce the parameter search with `node scripts/tune-retrieval.mjs <vault> <golden>`.
+Reproduce either sweep: `node scripts/tune-retrieval.mjs <vault> <golden>` (graph/scoring params),
+`node scripts/tune-fusion.mjs <vault> <golden>` (lexical/dense balance).
+
+### Dense retrieval setup
+
+Embeddings run **locally** — no API key, nothing leaves the machine, and query time needs no
+network. The model is an optional dependency, so `bm25` keeps working without it:
+
+```
+npm install @huggingface/transformers      # ~120 MB model, downloaded on first use
+manent serve <vault> --retriever fused     # or --retriever dense
+manent eval <vault> --golden ... --retriever all
+```
+
+Vectors are cached in `<vault>/.manent/embeddings.json`, keyed by content hash: editing one note
+re-embeds one note. Changing the model invalidates the cache. `manent init` gitignores that
+directory — it is derived data, rebuildable from the notes.
 
 ## Protocol eras
 
@@ -165,7 +188,8 @@ vault/
 - [x] Eval harness: three query kinds, recall@k / MRR / nDCG, regression gate
 - [x] Lexical retrieval done properly (stopwords, length-gated prefix/fuzzy): +30 pts hit@1
 - [x] Graph expansion (Personalized PageRank) + RRF fusion — built, measured, **not** default
-- [ ] Dense embeddings for the vocabulary-mismatch gap (`oblique` MRR 0.10 → target 0.5+)
+- [x] Local dense embeddings + RRF fusion: curated hit@1 75% → 100%, oblique MRR 0.10 → 0.21
+- [ ] Chunk-level embeddings for the remaining oblique gap (long notes dilute into one passage)
 - [ ] Curation: embedding-cluster dedup, contradiction detection, Leiden community → MOC suggestions
 - [x] Streamable HTTP transport, stateless, bearer-token auth
 - [x] OAuth 2.1 (RFC 9728 metadata, dynamic registration, PKCE) — connects from claude.ai

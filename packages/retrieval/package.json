@@ -13,5 +13,8 @@
   "dependencies": {
     "@manent/core": "*",
     "minisearch": "^7.1.0"
+  },
+  "optionalDependencies": {
+    "@huggingface/transformers": "^3.8.1"
   }
 }
