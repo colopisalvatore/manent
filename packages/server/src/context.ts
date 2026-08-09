@@ -73,7 +73,7 @@ export async function loadBrainContext(
       ctx.retriever = choice === "dense" ? denseRetriever(dense) : fusedRetriever(notes, dense);
       console.error(
         `[manent] ${choice} ranker ready in ${((Date.now() - started) / 1000).toFixed(1)}s — ` +
-          `${dense.vectors.size} notes (${dense.embedded} embedded, ${dense.reused} cached)`,
+          `${dense.notes} notes / ${dense.chunks.length} passages (${dense.embedded} notes embedded, ${dense.reused} cached)`,
       );
     } catch (err) {
       // Serving lexical results beats serving none: keep the fallback and say so.

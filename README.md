@@ -121,11 +121,29 @@ Four findings worth keeping:
    hand-written queries, trading ~2 points on the synthetic set.
 4. **Vocabulary mismatch is improved, not solved**: `oblique` MRR went 0.099 → 0.208 and recall@5
    25% → 37.5%. A question whose wording shares nothing with its note is still often unreachable.
-   The likely next step is chunk-level embeddings — notes are currently embedded as one truncated
-   passage, so a long note's specific paragraph gets diluted.
+5. **Chunking made it worse here, and that is informative.** Splitting notes into passages was the
+   obvious next step; measured, it cost 10–15 points of curated hit@1. With ~2400 passages instead
+   of 307 notes, max-scoring gives a long note one chance per passage to match by luck, so retros
+   and legal texts float up — the same length bias BM25 normalizes away. Damping by passage count
+   (`max-norm`) recovers oblique recall (MRR 0.221) but still trades away curated and auto accuracy.
 
-Reproduce either sweep: `node scripts/tune-retrieval.mjs <vault> <golden>` (graph/scoring params),
-`node scripts/tune-fusion.mjs <vault> <golden>` (lexical/dense balance).
+| Passages | curated hit@1 | oblique MRR | auto hit@1 | Configuration |
+|---|---|---|---|---|
+| 307 | **95.0%** | 0.133 | **95.9%** | one passage per note, full body |
+| 2419 | 90.0% | 0.096 | 96.3% | 1000-char passages, best-passage scoring |
+| 2419 | 85.0% | **0.221** | 91.9% | 1000-char passages, length-damped |
+| 1181 | 75.0% | 0.013 | 95.9% | 2000-char passages, best-passage |
+| 1181 | 55–75% | ≤0.19 | 73–79% | any size, **without** the contextual prefix |
+
+   Two things to keep from that: the **contextual prefix is not optional** — a passage stripped of
+   its note's name and description loses the subject and everything collapses; and **truncation
+   beats completeness** on this corpus (1400-char single passage scored 100%, full body 95%).
+   Notes here are atomic and front-loaded — one fact each, stated at the top — so the tail is
+   elaboration that only blurs the vector. Raise `maxPassages` for vaults of long, multi-topic
+   documents, where the answer can sit in the middle of a note.
+
+Reproduce any sweep: `scripts/tune-retrieval.mjs` (graph/scoring params), `scripts/tune-fusion.mjs`
+(lexical/dense balance), `scripts/tune-chunking.mjs` (passage size, prefix, aggregation).
 
 ### Dense retrieval setup
 
@@ -189,7 +207,7 @@ vault/
 - [x] Lexical retrieval done properly (stopwords, length-gated prefix/fuzzy): +30 pts hit@1
 - [x] Graph expansion (Personalized PageRank) + RRF fusion — built, measured, **not** default
 - [x] Local dense embeddings + RRF fusion: curated hit@1 75% → 100%, oblique MRR 0.10 → 0.21
-- [ ] Chunk-level embeddings for the remaining oblique gap (long notes dilute into one passage)
+- [x] Chunk-level embeddings — implemented, measured, **not** default: worse on atomic notes
 - [ ] Curation: embedding-cluster dedup, contradiction detection, Leiden community → MOC suggestions
 - [x] Streamable HTTP transport, stateless, bearer-token auth
 - [x] OAuth 2.1 (RFC 9728 metadata, dynamic registration, PKCE) — connects from claude.ai

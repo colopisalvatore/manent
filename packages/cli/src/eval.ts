@@ -69,10 +69,13 @@ export async function runEvalCommand(root: string, opts: EvalCliOptions): Promis
     dense = await buildDenseIndex(notes, model, {
       root,
       onProgress: (done, total) => {
-        if (done === total || done % 64 === 0) console.log(`  embedded ${done}/${total}`);
+        if (done === total || done % 128 === 0) console.log(`  embedded ${done}/${total} passages`);
       },
     });
-    console.log(`dense index: ${dense.vectors.size} notes (${dense.embedded} embedded, ${dense.reused} from cache)`);
+    console.log(
+      `dense index: ${dense.notes} notes / ${dense.chunks.length} passages ` +
+        `(${dense.embedded} notes embedded, ${dense.reused} from cache)`,
+    );
   }
 
   const build = (name: string): Retriever => {
