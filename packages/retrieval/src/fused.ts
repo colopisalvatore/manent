@@ -1,6 +1,6 @@
 import type { Note } from "@manent/core";
 import { bm25Candidates, buildSearchIndex } from "./bm25.js";
-import type { DenseIndex } from "./dense.js";
+import type { DenseIndex, DenseSearchOptions } from "./dense.js";
 import { denseRetriever } from "./dense.js";
 import { reciprocalRankFusion, type RankedList } from "./fusion.js";
 import type { Hit, Retriever } from "./types.js";
@@ -12,6 +12,8 @@ export interface FusedOptions {
   denseWeight?: number;
   /** weight of the lexical list inside the fusion */
   lexicalWeight?: number;
+  /** how passage scores collapse per note (see DenseSearchOptions) */
+  dense?: DenseSearchOptions;
 }
 
 /**
@@ -21,11 +23,11 @@ export interface FusedOptions {
  * trade worth making, since the curated set is the closer proxy for real use.
  * At equal weights the lexical list pulls correct answers off the top spot.
  */
-const DEFAULTS: Required<FusedOptions> = {
+const DEFAULTS = {
   depth: 30,
   denseWeight: 2,
   lexicalWeight: 1,
-};
+} satisfies Omit<Required<FusedOptions>, "dense">;
 
 /**
  * Lexical + dense, fused with Reciprocal Rank Fusion.
@@ -39,7 +41,7 @@ const DEFAULTS: Required<FusedOptions> = {
 export function fusedRetriever(notes: Note[], dense: DenseIndex, options: FusedOptions = {}): Retriever {
   const opts = { ...DEFAULTS, ...options };
   const index = buildSearchIndex(notes);
-  const denseR = denseRetriever(dense);
+  const denseR = denseRetriever(dense, options.dense);
 
   return {
     name: "fused",

@@ -13,9 +13,17 @@ export {
 export {
   buildDenseIndex,
   denseRetriever,
-  noteEmbeddingText,
   DENSE_CACHE_PATH,
   type DenseIndex,
   type BuildDenseOptions,
+  type DenseSearchOptions,
 } from "./dense.js";
+export {
+  chunkNote,
+  chunkVault,
+  chunkingSignature,
+  DEFAULT_CHUNKING,
+  type Chunk,
+  type ChunkOptions,
+} from "./chunk.js";
 export { fusedRetriever, type FusedOptions } from "./fused.js";
