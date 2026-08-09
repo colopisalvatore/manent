@@ -1,5 +1,5 @@
 {
-  "name": "@manent/server",
+  "name": "@manent/retrieval",
   "version": "0.0.1",
   "type": "module",
   "main": "dist/index.js",
@@ -11,9 +11,7 @@
     "build": "tsc -b"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.17.0",
     "@manent/core": "*",
-    "zod": "^3.23.8",
-    "@manent/retrieval": "*"
+    "minisearch": "^7.1.0"
   }
 }

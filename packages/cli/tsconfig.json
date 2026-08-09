@@ -4,6 +4,24 @@
     "outDir": "dist",
     "rootDir": "src"
   },
-  "include": ["src"],
-  "references": [{ "path": "../core" }, { "path": "../lint" }, { "path": "../server" }]
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../core"
+    },
+    {
+      "path": "../retrieval"
+    },
+    {
+      "path": "../eval"
+    },
+    {
+      "path": "../lint"
+    },
+    {
+      "path": "../server"
+    }
+  ]
 }

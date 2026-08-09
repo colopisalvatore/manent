@@ -1,0 +1,149 @@
+{
+  "name": "aios-brain real queries",
+  "queries": [
+    {
+      "query": "supabase RLS anon key aperta a tutti",
+      "expected": ["feedback_supabase_anon_grant_all"],
+      "source": "curated",
+      "note": "query reale usata in sessione"
+    },
+    {
+      "query": "cpanel cron non applica il comando",
+      "expected": ["feedback_cpanel_cron_wrapper_script"],
+      "source": "curated"
+    },
+    {
+      "query": "deploy next.js su cpanel prisma modulo non trovato",
+      "expected": ["feedback_cpanel_nodejs_next_deploy"],
+      "source": "curated"
+    },
+    {
+      "query": "automazione che committa lo staged al posto mio",
+      "expected": ["feedback_atomic_commit_autocommit_hook"],
+      "source": "curated"
+    },
+    {
+      "query": "come fatturare il lavoro fatto con l'AI",
+      "expected": ["feedback_billing_effort_a_corpo"],
+      "source": "curated"
+    },
+    {
+      "query": "il sito risponde 200 ma il cron non gira davvero",
+      "expected": ["feedback_stato_vivo_non_solo_risposta_200", "feedback_spa_200_not_proof"],
+      "source": "curated"
+    },
+    {
+      "query": "ssh autentica ma non riesco a lanciare comandi",
+      "expected": ["feedback_shared_host_nproc_saturo"],
+      "source": "curated"
+    },
+    {
+      "query": "collegare un server MCP a claude.ai",
+      "expected": ["feedback_claudeai_connector_richiede_oauth"],
+      "source": "curated"
+    },
+    {
+      "query": "manent scaffold opensource del brain",
+      "expected": ["project_manent_oss_scaffold"],
+      "source": "curated"
+    },
+    {
+      "query": "non spegnere i server di sviluppo",
+      "expected": ["feedback_never_stop_dev_servers"],
+      "source": "curated"
+    },
+    {
+      "query": "una PR per ogni task asana",
+      "expected": ["feedback_one_branch_one_pr_per_task"],
+      "source": "curated"
+    },
+    {
+      "query": "worktree separato per ogni agente parallelo",
+      "expected": ["feedback_worktree_per_agent", "feedback_multiagent_disjoint_lanes"],
+      "source": "curated"
+    },
+    {
+      "query": "security definer view supabase come si sistema",
+      "expected": ["feedback_supabase_security_definer_view", "feedback_security_definer_current_user_pitfall"],
+      "source": "curated"
+    },
+    {
+      "query": "powershell niente doppio ampersand nei comandi",
+      "expected": ["feedback_user_terminal_ps51"],
+      "source": "curated"
+    },
+    {
+      "query": "architettura di riferimento per un brain llm",
+      "expected": ["reference_llm_brain_architecture"],
+      "source": "curated"
+    },
+    {
+      "query": "il classifier blocca, cosa faccio",
+      "expected": ["feedback_classifier_prepare_user_artifacts"],
+      "source": "curated"
+    },
+    {
+      "query": "traduzioni marketing adattate al contesto non letterali",
+      "expected": ["feedback_translate_contextual_not_literal"],
+      "source": "curated"
+    },
+    {
+      "query": "screenshot veri invece di mockup per la landing",
+      "expected": ["feedback_marketing_visuals_real_not_mockup"],
+      "source": "curated"
+    },
+    {
+      "query": "cloudflare blocca le mie sonde e sembra il sito giu",
+      "expected": ["feedback_measure_site_behind_cloudflare"],
+      "source": "curated"
+    },
+    {
+      "query": "istruzioni passo passo per l'utente nell'interfaccia",
+      "expected": ["feedback_istruzioni_operative_ui_passo_passo"],
+      "source": "curated"
+    },
+
+    {
+      "query": "ho buttato giu la produzione, come la rimetto in piedi",
+      "expected": ["project_beb_prod_recovery_runbook", "feedback_broad_approval_not_destructive_ops"],
+      "source": "oblique",
+      "note": "il termine chiave della nota e' clean_slate, mai usato nella query"
+    },
+    {
+      "query": "chi paga i 2 euro sulla ricevuta",
+      "expected": ["feedback_no_marca_bollo_to_client"],
+      "source": "oblique",
+      "note": "la nota dice marca da bollo, la query no"
+    },
+    {
+      "query": "il cliente si lamenta che le pagine si aprono piano",
+      "expected": ["project_performance_optimization"],
+      "source": "oblique"
+    },
+    {
+      "query": "i soldi dei giocatori risultano in due posti diversi",
+      "expected": ["project_beb_economia_wallet_unico"],
+      "source": "oblique"
+    },
+    {
+      "query": "l'agente ha modificato i file della cartella sbagliata",
+      "expected": ["feedback_worktree_edit_path_discipline"],
+      "source": "oblique"
+    },
+    {
+      "query": "questa falla c'era anche prima che toccassi il codice",
+      "expected": ["feedback_preexisting_vs_new_risk"],
+      "source": "oblique"
+    },
+    {
+      "query": "impedire che qualcuno rivenda il mio template a pagamento",
+      "expected": ["project_licensing_antipiracy"],
+      "source": "oblique"
+    },
+    {
+      "query": "posso inventarmi un pagamento finto per provare il flusso",
+      "expected": ["feedback_no_forged_data_in_prod_tests"],
+      "source": "oblique"
+    }
+  ]
+}

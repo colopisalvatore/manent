@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import { createHash, timingSafeEqual } from "node:crypto";
-import { loadBrainContext } from "./context.js";
+import { loadBrainContext, type RetrieverName } from "./context.js";
 import { LEGACY_VERSIONS, serveLegacyHttp } from "./legacy.js";
 import { handleModernRequest, isModernRequest, MODERN_VERSIONS } from "./modern.js";
 import { handleOAuth, verifyAccessToken } from "./oauth.js";
@@ -18,6 +18,8 @@ export interface HttpOptions {
    * "legacy" (handshake, SDK) or "modern" (2026-07-28, native). Default "auto".
    */
   era?: "auto" | "legacy" | "modern";
+  /** ranking strategy: "bm25" (default, measured best) or "hybrid" */
+  retriever?: RetrieverName;
 }
 
 /** Public origin as seen by the client, honouring the tunnel/proxy headers. */
@@ -58,7 +60,7 @@ export async function serveHttp(root: string, opts: HttpOptions): Promise<Server
   if (!opts.token || opts.token.length < 16) {
     throw new Error("http mode requires a token of at least 16 chars (--token or MANENT_HTTP_TOKEN)");
   }
-  const ctx = await loadBrainContext(root);
+  const ctx = await loadBrainContext(root, { retriever: opts.retriever });
   const pinned = opts.era ?? "auto";
 
   const httpServer = createServer(async (req, res) => {

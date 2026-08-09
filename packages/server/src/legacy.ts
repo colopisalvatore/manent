@@ -3,7 +3,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { BrainContext } from "./context.js";
-import { loadBrainContext } from "./context.js";
+import { loadBrainContext, type RetrieverName } from "./context.js";
 import { BRAIN_TOOLS } from "./tools.js";
 
 /**
@@ -46,11 +46,11 @@ export async function serveLegacyHttp(
   await transport.handleRequest(req, res, body);
 }
 
-export async function createBrainServer(root: string): Promise<McpServer> {
-  return buildLegacyServer(await loadBrainContext(root));
+export async function createBrainServer(root: string, retriever?: RetrieverName): Promise<McpServer> {
+  return buildLegacyServer(await loadBrainContext(root, { retriever }));
 }
 
-export async function serveStdio(root: string): Promise<void> {
-  const server = await createBrainServer(root);
+export async function serveStdio(root: string, retriever?: RetrieverName): Promise<void> {
+  const server = await createBrainServer(root, retriever);
   await server.connect(new StdioServerTransport());
 }

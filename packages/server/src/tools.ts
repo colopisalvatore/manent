@@ -52,16 +52,7 @@ export const BRAIN_TOOLS: BrainTool[] = [
     run(args, ctx) {
       const query = String(args.query ?? "");
       const k = typeof args.k === "number" ? args.k : 8;
-      const hits = ctx.index
-        .search(query)
-        .slice(0, k)
-        .map((h) => ({
-          name: h.id as string,
-          description: h.description as string,
-          path: h.relPath as string,
-          score: Math.round(h.score * 100) / 100,
-        }));
-      return text(hits);
+      return text(ctx.retriever.search(query, k));
     },
   },
   {

@@ -21,6 +21,8 @@ Agent memory today is either a proprietary vector-DB dump (lock-in, no audit tra
 |---|---|
 | `@manent/spec` | The vault specification: note types, frontmatter schemas, typed edges, layout |
 | `@manent/core` | Parser (frontmatter + wikilinks), vault loader, graph builder |
+| `@manent/retrieval` | Ranking: BM25 lexical, graph expansion (Personalized PageRank), RRF fusion |
+| `@manent/eval` | Eval harness: golden sets, recall@k / MRR / nDCG, regression gate |
 | `@manent/lint` | Rule engine: schema-lint, link-lint, duplicate/orphan detection |
 | `@manent/server` | MCP server over a vault: `brain_search`, `brain_read`, `brain_neighbors` — see [Protocol eras](#protocol-eras) |
 | `@manent/cli` | `manent init | lint | serve` |
@@ -77,6 +79,46 @@ Three details worth knowing:
 Run `npm run test:oauth` to exercise the whole flow, including wrong token, failed PKCE, code
 replay, forged token and disallowed redirect.
 
+## Retrieval, measured
+
+Ranking changes are decided by an eval harness, not by intuition. `manent eval` scores a
+retriever against three kinds of query, and each kind answers a different question:
+
+| Source | How it's built | What it measures |
+|---|---|---|
+| `curated` | hand written, wording close to the note | lexical recall |
+| `oblique` | asks for the concept **without** the note's words | semantic recall — the hard case |
+| `auto` | derived from each note's own description | broad regression signal, no labelling |
+
+```
+manent eval <vault> --golden eval/golden-aios.json          # bm25 vs hybrid side by side
+manent eval <vault> --golden ... --save baseline.json       # record a baseline
+manent eval <vault> --golden ... --baseline baseline.json   # exits 1 if a metric dropped
+```
+
+Results on a real 305-note vault (298 queries), and what they changed:
+
+| | curated hit@1 | curated MRR | oblique MRR | auto hit@1 |
+|---|---|---|---|---|
+| BM25, naive tokenizer | 45.0% | 0.621 | — | 97.8% |
+| **BM25 + stopwords, length-gated prefix/fuzzy** | **75.0%** | **0.863** | 0.099 | **97.8%** |
+| Hybrid (graph expansion + recency + centrality) | 75.0% | 0.863 | 0.104 | 93.0% |
+
+Three findings worth keeping:
+
+1. **Tokenization was the whole win.** Dropping stopwords and allowing prefix/fuzzy matching only
+   on longer terms moved curated hit@1 by 30 points. With prefix matching on, `di` matches
+   *diritto*, *disposizione*, *documento* — long notes then win on accumulated noise.
+2. **Graph expansion did not pay.** Once retrieval is lexically sound, Personalized PageRank over
+   wikilinks adds nothing measurable and the recency/centrality multipliers cost ~5 points on the
+   auto set. `bm25` is therefore the default; `hybrid` stays available (`--retriever hybrid`) for
+   vaults with a much denser link structure. PPR amplifies a good seed — it cannot create one.
+3. **The real gap is vocabulary mismatch**: `oblique` MRR sits at ~0.10 for both. Notes that never
+   use the query's words are effectively unreachable today. That is the case dense embeddings
+   exist for, and it is the next item on the roadmap — now with a number attached to it.
+
+Reproduce the parameter search with `node scripts/tune-retrieval.mjs <vault> <golden>`.
+
 ## Protocol eras
 
 MCP revision `2026-07-28` removed the `initialize` handshake and sessions; every shipping client
@@ -120,11 +162,11 @@ vault/
 ## Roadmap
 
 - [x] Spec v0.1 + lint + graph + BM25 search + MCP stdio server
-- [ ] Hybrid retrieval: BM25 ∥ dense embeddings → Reciprocal Rank Fusion
-- [ ] Graph expansion: Personalized PageRank over wikilinks
-- [ ] Scoring: relevance × recency-decay × importance (Generative Agents model)
+- [x] Eval harness: three query kinds, recall@k / MRR / nDCG, regression gate
+- [x] Lexical retrieval done properly (stopwords, length-gated prefix/fuzzy): +30 pts hit@1
+- [x] Graph expansion (Personalized PageRank) + RRF fusion — built, measured, **not** default
+- [ ] Dense embeddings for the vocabulary-mismatch gap (`oblique` MRR 0.10 → target 0.5+)
 - [ ] Curation: embedding-cluster dedup, contradiction detection, Leiden community → MOC suggestions
-- [ ] Eval harness: golden set, recall@k / MRR, CI regression gate
 - [x] Streamable HTTP transport, stateless, bearer-token auth
 - [x] OAuth 2.1 (RFC 9728 metadata, dynamic registration, PKCE) — connects from claude.ai
 - [x] Two protocol eras as separate implementations: legacy handshake (SDK) and native 2026-07-28
