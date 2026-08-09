@@ -1,0 +1,149 @@
+{
+  "name": "aios-brain real queries",
+  "queries": [
+    {
+      "query": "supabase RLS anon key aperta a tutti",
+      "expected": ["note:4cadc5da3a5f"],
+      "source": "curated",
+      "note": "query reale usata in sessione"
+    },
+    {
+      "query": "cpanel cron non applica il comando",
+      "expected": ["note:a4859b9f5c00"],
+      "source": "curated"
+    },
+    {
+      "query": "deploy next.js su cpanel prisma modulo non trovato",
+      "expected": ["note:e0f3007e10f8"],
+      "source": "curated"
+    },
+    {
+      "query": "automazione che committa lo staged al posto mio",
+      "expected": ["note:e57ce7cf66e5"],
+      "source": "curated"
+    },
+    {
+      "query": "come fatturare il lavoro fatto con l'AI",
+      "expected": ["note:a2a48e40b3aa"],
+      "source": "curated"
+    },
+    {
+      "query": "il sito risponde 200 ma il cron non gira davvero",
+      "expected": ["note:8ff98559dbbf", "note:2fae8f303dae"],
+      "source": "curated"
+    },
+    {
+      "query": "ssh autentica ma non riesco a lanciare comandi",
+      "expected": ["note:babc734bf075"],
+      "source": "curated"
+    },
+    {
+      "query": "collegare un server MCP a claude.ai",
+      "expected": ["note:c2d8c8051c32"],
+      "source": "curated"
+    },
+    {
+      "query": "manent scaffold opensource del brain",
+      "expected": ["note:f64e7899453c"],
+      "source": "curated"
+    },
+    {
+      "query": "non spegnere i server di sviluppo",
+      "expected": ["note:63e5dfeeaa68"],
+      "source": "curated"
+    },
+    {
+      "query": "una PR per ogni task asana",
+      "expected": ["note:0b75cda9cacf"],
+      "source": "curated"
+    },
+    {
+      "query": "worktree separato per ogni agente parallelo",
+      "expected": ["note:845b245ffb4c", "note:c12c0139b02a"],
+      "source": "curated"
+    },
+    {
+      "query": "security definer view supabase come si sistema",
+      "expected": ["note:e60012d9beeb", "note:5437b75535aa"],
+      "source": "curated"
+    },
+    {
+      "query": "powershell niente doppio ampersand nei comandi",
+      "expected": ["note:03203afd1c4f"],
+      "source": "curated"
+    },
+    {
+      "query": "architettura di riferimento per un brain llm",
+      "expected": ["note:77f6087d9d31"],
+      "source": "curated"
+    },
+    {
+      "query": "il classifier blocca, cosa faccio",
+      "expected": ["note:da7466f41ae9"],
+      "source": "curated"
+    },
+    {
+      "query": "traduzioni marketing adattate al contesto non letterali",
+      "expected": ["note:e2db05c2aafd"],
+      "source": "curated"
+    },
+    {
+      "query": "screenshot veri invece di mockup per la landing",
+      "expected": ["note:37ee0a18c239"],
+      "source": "curated"
+    },
+    {
+      "query": "cloudflare blocca le mie sonde e sembra il sito giu",
+      "expected": ["note:fecd6b299d28"],
+      "source": "curated"
+    },
+    {
+      "query": "istruzioni passo passo per l'utente nell'interfaccia",
+      "expected": ["note:12339bb94e79"],
+      "source": "curated"
+    },
+
+    {
+      "query": "ho buttato giu la produzione, come la rimetto in piedi",
+      "expected": ["note:23801d230689", "note:78bbdc8a8682"],
+      "source": "oblique",
+      "note": "il termine chiave della nota e' clean_slate, mai usato nella query"
+    },
+    {
+      "query": "chi paga i 2 euro sulla ricevuta",
+      "expected": ["note:0496e1fe25e3"],
+      "source": "oblique",
+      "note": "la nota dice marca da bollo, la query no"
+    },
+    {
+      "query": "il cliente si lamenta che le pagine si aprono piano",
+      "expected": ["note:30d4432a9d6d"],
+      "source": "oblique"
+    },
+    {
+      "query": "i soldi dei giocatori risultano in due posti diversi",
+      "expected": ["note:0f83552b2030"],
+      "source": "oblique"
+    },
+    {
+      "query": "l'agente ha modificato i file della cartella sbagliata",
+      "expected": ["note:122a23faa21b"],
+      "source": "oblique"
+    },
+    {
+      "query": "questa falla c'era anche prima che toccassi il codice",
+      "expected": ["note:a5235c0b6a51"],
+      "source": "oblique"
+    },
+    {
+      "query": "impedire che qualcuno rivenda il mio template a pagamento",
+      "expected": ["note:b78fab7b3a26"],
+      "source": "oblique"
+    },
+    {
+      "query": "posso inventarmi un pagamento finto per provare il flusso",
+      "expected": ["note:be8b38b9887f"],
+      "source": "oblique"
+    }
+  ]
+}

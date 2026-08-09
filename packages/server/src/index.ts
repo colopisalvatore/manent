@@ -1,5 +1,7 @@
-export { buildSearchIndex, type SearchDoc } from "./search.js";
-export { loadBrainContext, type BrainContext } from "./context.js";
+// Retrieval lives in @manent/retrieval: one implementation for the server and
+// for the eval harness, so what ships is what gets measured.
+export { bm25Retriever, hybridRetriever, buildSearchIndex, type Retriever, type Hit } from "@manent/retrieval";
+export { loadBrainContext, type BrainContext, type RetrieverName } from "./context.js";
 export { BRAIN_TOOLS, findTool, type BrainTool, type ToolResult } from "./tools.js";
 
 // Legacy era — handshake revisions, served by the official SDK.

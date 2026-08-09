@@ -4,6 +4,7 @@ import { Command } from "commander";
 import { formatFindings, lintVault } from "@manent/lint";
 import { serveHttp, serveStdio } from "@manent/server";
 import { initVault } from "./init.js";
+import { RETRIEVERS, runEvalCommand } from "./eval.js";
 
 const program = new Command();
 
@@ -35,6 +36,40 @@ program
   });
 
 program
+  .command("eval")
+  .description("measure retrieval quality on a vault (recall@k, MRR, nDCG) and gate regressions")
+  .argument("[dir]", "vault directory", ".")
+  .option("--golden <file>", "curated golden set (JSON)")
+  .option("--no-auto", "skip queries auto-derived from note descriptions")
+  .option("--retriever <name>", "bm25 | hybrid | both", "both")
+  .option("--depth <n>", "how many results to score", "10")
+  .option("--worst <n>", "list up to N misses", "5")
+  .option("--save <file>", "write the report as JSON")
+  .option("--baseline <file>", "fail if any metric dropped against this saved report")
+  .action(
+    async (
+      dir: string,
+      opts: { golden?: string; auto: boolean; retriever: string; depth: string; worst: string; save?: string; baseline?: string },
+    ) => {
+      if (!RETRIEVERS.includes(opts.retriever as (typeof RETRIEVERS)[number])) {
+        console.error(`--retriever must be one of: ${RETRIEVERS.join(", ")}`);
+        process.exitCode = 1;
+        return;
+      }
+      const code = await runEvalCommand(resolve(dir), {
+        golden: opts.golden,
+        auto: opts.auto,
+        retriever: opts.retriever,
+        depth: Number(opts.depth),
+        worst: Number(opts.worst),
+        save: opts.save,
+        baseline: opts.baseline,
+      });
+      if (code !== 0) process.exitCode = code;
+    },
+  );
+
+program
   .command("serve")
   .description("serve the vault over MCP — stdio by default, Streamable HTTP with --http")
   .argument("[dir]", "vault directory", ".")
@@ -46,10 +81,16 @@ program
     "protocol era for --http: auto | legacy (handshake revisions) | modern (2026-07-28)",
     "auto",
   )
-  .action(async (dir: string, opts: { http?: string; host: string; token?: string; era: string }) => {
+  .option("--retriever <name>", "ranking: bm25 (default) | hybrid (graph expansion)", "bm25")
+  .action(
+    async (
+      dir: string,
+      opts: { http?: string; host: string; token?: string; era: string; retriever: string },
+    ) => {
     const root = resolve(dir);
+    const retriever = opts.retriever === "hybrid" ? "hybrid" : "bm25";
     if (!opts.http) {
-      await serveStdio(root);
+      await serveStdio(root, retriever);
       return;
     }
     if (!["auto", "legacy", "modern"].includes(opts.era)) {
@@ -57,13 +98,15 @@ program
       process.exitCode = 1;
       return;
     }
-    const token = opts.token ?? process.env.MANENT_HTTP_TOKEN ?? "";
-    await serveHttp(root, {
-      port: Number(opts.http),
-      host: opts.host,
-      token,
-      era: opts.era as "auto" | "legacy" | "modern",
-    });
-  });
+      const token = opts.token ?? process.env.MANENT_HTTP_TOKEN ?? "";
+      await serveHttp(root, {
+        port: Number(opts.http),
+        host: opts.host,
+        token,
+        era: opts.era as "auto" | "legacy" | "modern",
+        retriever,
+      });
+    },
+  );
 
 await program.parseAsync();
