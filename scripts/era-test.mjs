@@ -13,6 +13,14 @@ const ok = (label, cond, extra = "") => {
   console.log(`${cond ? "PASS" : "FAIL"}  ${label}${extra ? "  " + extra : ""}`);
 };
 
+// Tracks the tool set in packages/server/src/tools.ts. Checked by name, not by a
+// magic count, so adding a tool needs one edit here, not three scattered fixes.
+const EXPECTED_TOOLS = ["brain_search", "brain_read", "brain_neighbors", "brain_list", "brain_read_raw", "brain_grep"];
+const hasAllTools = (list) =>
+  Array.isArray(list) &&
+  list.length === EXPECTED_TOOLS.length &&
+  EXPECTED_TOOLS.every((n) => list.some((t) => t.name === n));
+
 async function withServer(port, era, fn) {
   const args = ["packages/cli/dist/index.js", "serve", VAULT, "--http", String(port), "--token", TOKEN];
   if (era) args.push("--era", era);
@@ -59,7 +67,7 @@ await withServer(3951, "legacy", async (post) => {
 
   const tools = await post({ jsonrpc: "2.0", id: 2, method: "tools/list" });
   const toolsBody = await tools.json();
-  ok("tools/list → 3 tools", tools.status === 200 && toolsBody.result?.tools?.length === 3);
+  ok("tools/list → all tools", tools.status === 200 && hasAllTools(toolsBody.result?.tools));
 
   const call = await post({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "brain_search", arguments: { query: "example lesson", k: 2 } } });
   const callBody = await call.json();
@@ -85,9 +93,9 @@ await withServer(3952, "modern", async (post) => {
   const tools = await post({ jsonrpc: "2.0", id: 2, method: "tools/list", params: { _meta: MODERN_META } });
   const toolsBody = await tools.json();
   ok(
-    "tools/list → 3 tools with JSON Schema + cache fields",
+    "tools/list → all tools with JSON Schema + cache fields",
     tools.status === 200 &&
-      toolsBody.result?.tools?.length === 3 &&
+      hasAllTools(toolsBody.result?.tools) &&
       toolsBody.result.tools[0].inputSchema?.type === "object" &&
       toolsBody.result.resultType === "complete" &&
       !!toolsBody.result.ttlMs,
@@ -121,7 +129,7 @@ await withServer(3953, null, async (post) => {
   ok("modern tools/call routed to modern → note body", (await modernCall.json()).result?.content?.[0]?.text?.includes("Feedback notes"));
 
   const legacyTools = await post({ jsonrpc: "2.0", id: 4, method: "tools/list" });
-  ok("bare tools/list routed to legacy → 3 tools", (await legacyTools.json()).result?.tools?.length === 3);
+  ok("bare tools/list routed to legacy → all tools", hasAllTools((await legacyTools.json()).result?.tools));
 });
 
 console.log(failures === 0 ? "\nall era tests passed" : `\n${failures} FAILURES`);

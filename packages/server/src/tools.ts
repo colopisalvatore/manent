@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { z, type ZodRawShape } from "zod";
 import { neighbors } from "@manent/core";
 import type { BrainContext } from "./context.js";
@@ -93,6 +94,108 @@ export const BRAIN_TOOLS: BrainTool[] = [
       const name = String(args.name ?? "");
       const depth = typeof args.depth === "number" ? args.depth : 1;
       return text([...neighbors(ctx.graph, name, depth)]);
+    },
+  },
+  {
+    name: "brain_list",
+    description:
+      "List every note in the vault as {name, type, description, relPath}. Optional type filter. This is the full index — use it to enumerate, not to search.",
+    inputSchemaJson: {
+      type: "object",
+      properties: {
+        type: { type: "string", description: "keep only notes with this frontmatter type" },
+        limit: { type: "integer", minimum: 1, maximum: 5000, description: "max rows, default 500" },
+      },
+      additionalProperties: false,
+    },
+    inputSchemaZod: {
+      type: z.string().optional().describe("keep only notes with this frontmatter type"),
+      limit: z.number().int().min(1).max(5000).optional().describe("max rows, default 500"),
+    },
+    run(args, ctx) {
+      const type = args.type != null ? String(args.type) : undefined;
+      const limit = typeof args.limit === "number" ? args.limit : 500;
+      const rows = ctx.notes
+        .filter((n) => type == null || n.frontmatter.type === type)
+        .slice(0, limit)
+        .map((n) => ({
+          name: n.frontmatter.name ?? n.relPath,
+          type: n.frontmatter.type ?? null,
+          description: n.frontmatter.description ?? null,
+          relPath: n.relPath,
+        }));
+      return text(rows);
+    },
+  },
+  {
+    name: "brain_read_raw",
+    description:
+      "Read a note's exact file bytes from disk (frontmatter YAML + body verbatim), keyed by canonical name. Use when you need the literal markdown, not the parsed view brain_read gives.",
+    inputSchemaJson: {
+      type: "object",
+      properties: { name: { type: "string" } },
+      required: ["name"],
+      additionalProperties: false,
+    },
+    inputSchemaZod: { name: z.string() },
+    async run(args, ctx) {
+      const name = String(args.name ?? "");
+      const note = ctx.graph.nodes.get(name);
+      if (!note) return { content: [{ type: "text", text: `Note not found: ${name}` }], isError: true };
+      try {
+        return text(await readFile(note.path, "utf8"));
+      } catch (err) {
+        return {
+          content: [{ type: "text", text: `Read failed for ${note.relPath}: ${err instanceof Error ? err.message : String(err)}` }],
+          isError: true,
+        };
+      }
+    },
+  },
+  {
+    name: "brain_grep",
+    description:
+      "Regex search over note bodies. Returns {name, relPath, line, text} per match. Complements brain_search: exact/literal matching, not ranked relevance.",
+    inputSchemaJson: {
+      type: "object",
+      properties: {
+        pattern: { type: "string", description: "JavaScript regular expression" },
+        flags: { type: "string", description: "regex flags, default 'i'" },
+        limit: { type: "integer", minimum: 1, maximum: 500, description: "max matches, default 100" },
+      },
+      required: ["pattern"],
+      additionalProperties: false,
+    },
+    inputSchemaZod: {
+      pattern: z.string().describe("JavaScript regular expression"),
+      flags: z.string().optional().describe("regex flags, default 'i'"),
+      limit: z.number().int().min(1).max(500).optional().describe("max matches, default 100"),
+    },
+    run(args, ctx) {
+      const pattern = String(args.pattern ?? "");
+      const flags = args.flags != null ? String(args.flags) : "i";
+      const limit = typeof args.limit === "number" ? args.limit : 100;
+      let re: RegExp;
+      try {
+        re = new RegExp(pattern, flags.includes("g") ? flags : flags + "g");
+      } catch (err) {
+        return {
+          content: [{ type: "text", text: `Bad regex: ${err instanceof Error ? err.message : String(err)}` }],
+          isError: true,
+        };
+      }
+      const hits: Array<{ name: string; relPath: string; line: number; text: string }> = [];
+      for (const n of ctx.notes) {
+        const lines = n.body.split("\n");
+        for (let i = 0; i < lines.length; i++) {
+          re.lastIndex = 0;
+          if (re.test(lines[i])) {
+            hits.push({ name: n.frontmatter.name ?? n.relPath, relPath: n.relPath, line: i + 1, text: lines[i].trim() });
+            if (hits.length >= limit) return text(hits);
+          }
+        }
+      }
+      return text(hits);
     },
   },
 ];
