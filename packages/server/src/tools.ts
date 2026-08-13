@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { z, type ZodRawShape } from "zod";
-import { neighbors } from "@manent/core";
+import { neighbors, writeNote, WriteRefused } from "@manent/core";
+import { NOTE_TYPES } from "@manent/spec";
 import type { BrainContext } from "./context.js";
 
 /**
@@ -21,6 +22,8 @@ export interface ToolResult {
 export interface BrainTool {
   name: string;
   description: string;
+  /** listed only on a writable server — a read-only vault should not advertise it */
+  requiresWrite?: boolean;
   /** JSON Schema 2020-12 — the modern path serves this verbatim */
   inputSchemaJson: Record<string, unknown>;
   /** same contract expressed for the SDK's Zod-based registration */
@@ -198,6 +201,115 @@ export const BRAIN_TOOLS: BrainTool[] = [
       return text(hits);
     },
   },
+  {
+    name: "brain_write",
+    requiresWrite: true,
+    description:
+      "Create or replace a note. Requires name (slug), description (one line) and type. mode: 'create' (default, refuses to clobber) or 'overwrite'.",
+    inputSchemaJson: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "canonical slug; becomes <name>.md — not a path" },
+        description: { type: "string", description: "one line: what this note is" },
+        type: { type: "string", enum: [...NOTE_TYPES], description: "note type from the spec" },
+        body: { type: "string", description: "markdown body, without frontmatter" },
+        dir: { type: "string", description: "vault-relative folder, e.g. 'memory' or 'projects/aios'" },
+        mode: { type: "string", enum: ["create", "overwrite"], description: "default 'create'" },
+      },
+      required: ["name", "description", "type", "body"],
+      additionalProperties: false,
+    },
+    inputSchemaZod: {
+      name: z.string().describe("canonical slug; becomes <name>.md — not a path"),
+      description: z.string().describe("one line: what this note is"),
+      type: z.enum(NOTE_TYPES).describe("note type from the spec"),
+      body: z.string().describe("markdown body, without frontmatter"),
+      dir: z.string().optional().describe("vault-relative folder, e.g. 'memory'"),
+      mode: z.enum(["create", "overwrite"]).optional().describe("default 'create'"),
+    },
+    run: (args, ctx) => runWrite(ctx, { ...args, mode: args.mode ?? "create" }),
+  },
+  {
+    name: "brain_append",
+    requiresWrite: true,
+    description:
+      "Append markdown to the body of an existing note, leaving its frontmatter intact.",
+    inputSchemaJson: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "canonical slug of the existing note" },
+        body: { type: "string", description: "markdown to append" },
+        dir: { type: "string", description: "vault-relative folder the note lives in" },
+      },
+      required: ["name", "body"],
+      additionalProperties: false,
+    },
+    inputSchemaZod: {
+      name: z.string().describe("canonical slug of the existing note"),
+      body: z.string().describe("markdown to append"),
+      dir: z.string().optional().describe("vault-relative folder the note lives in"),
+    },
+    run: (args, ctx) => runWrite(ctx, { ...args, mode: "append" }),
+  },
 ];
 
+/**
+ * Shared body of the write tools: the gate, the write, the re-index.
+ *
+ * A refused write returns `isError` with the reason rather than throwing — the
+ * caller is a model, and a sentence it can act on beats a stack trace.
+ */
+async function runWrite(ctx: BrainContext, args: Record<string, unknown>): Promise<ToolResult> {
+  if (!ctx.writable) {
+    return {
+      content: [
+        {
+          type: "text",
+          text: "This brain is read-only: the server was not started with --writable. Writes are refused.",
+        },
+      ],
+      isError: true,
+    };
+  }
+  // An existing note carries its own folder; callers need not know it.
+  const dir =
+    args.dir != null
+      ? String(args.dir)
+      : (() => {
+          const found = ctx.graph.nodes.get(String(args.name ?? ""));
+          const at = found?.relPath.lastIndexOf("/") ?? -1;
+          return found && at > 0 ? found.relPath.slice(0, at) : undefined;
+        })();
+
+  try {
+    const res = await writeNote(ctx.root, {
+      name: String(args.name ?? ""),
+      dir,
+      type: args.type != null ? String(args.type) : undefined,
+      description: args.description != null ? String(args.description) : undefined,
+      body: String(args.body ?? ""),
+      mode: args.mode as "create" | "overwrite" | "append",
+    });
+    await ctx.applyWrite(res.note);
+    return text({ ok: true, relPath: res.relPath, created: res.created, bytes: res.note.body.length });
+  } catch (err) {
+    if (err instanceof WriteRefused) return { content: [{ type: "text", text: err.message }], isError: true };
+    return {
+      content: [{ type: "text", text: `Write failed: ${err instanceof Error ? err.message : String(err)}` }],
+      isError: true,
+    };
+  }
+}
+
 export const findTool = (name: string): BrainTool | undefined => BRAIN_TOOLS.find((t) => t.name === name);
+
+/**
+ * The tools a given context should advertise.
+ *
+ * A read-only server hides the write tools instead of listing ones that can
+ * only fail: the surface a client sees is the surface it actually has. Both
+ * protocol adapters list through here so the two cannot disagree. `run` still
+ * re-checks the gate — listing is presentation, not enforcement.
+ */
+export const toolsFor = (ctx: Pick<BrainContext, "writable">): BrainTool[] =>
+  BRAIN_TOOLS.filter((t) => !t.requiresWrite || ctx.writable);

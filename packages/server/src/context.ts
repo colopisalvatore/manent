@@ -24,12 +24,28 @@ export interface BrainContext {
   retriever: Retriever;
   /** resolves when a background dense warmup has finished (or failed) */
   ready: Promise<void>;
+  /** vault root on disk — write tools resolve paths against it */
+  root: string;
+  /**
+   * Whether write tools may run. Off unless the operator opted in: a server
+   * reachable from the network holds one static bearer token, so writes are a
+   * deliberate choice, never a default.
+   */
+  writable: boolean;
+  /**
+   * Folds a freshly written note back into the served state, so a write is
+   * visible to the very next read. Lexical ranking is rebuilt synchronously;
+   * a dense index re-embeds only what changed (it caches by content hash).
+   */
+  applyWrite(note: Note): Promise<void>;
 }
 
 export interface LoadContextOptions {
   retriever?: RetrieverName;
   /** embedding model id for dense/fused */
   model?: string;
+  /** allow write tools; default false */
+  writable?: boolean;
   /**
    * "background" (default) starts serving immediately with the lexical ranker
    * and swaps in the dense one when it is ready. "blocking" waits — use it in
@@ -57,11 +73,30 @@ export async function loadBrainContext(
   const graph = buildGraph(notes);
   const choice = opts.retriever ?? "bm25";
 
+  /** retained across writes so a re-index re-embeds instead of reloading the model */
+  let denseModel: Awaited<ReturnType<typeof loadLocalEmbeddingModel>> | undefined;
+  const lexical = () => (choice === "hybrid" ? hybridRetriever({ notes, graph: ctx.graph }) : bm25Retriever(notes));
+
   const ctx: BrainContext = {
     notes,
     graph,
     retriever: choice === "hybrid" ? hybridRetriever({ notes, graph }) : bm25Retriever(notes),
     ready: Promise.resolve(),
+    root,
+    writable: opts.writable ?? false,
+    async applyWrite(note) {
+      // Mutated in place: the retrievers close over this array.
+      const at = notes.findIndex((n) => n.relPath === note.relPath);
+      if (at >= 0) notes[at] = note;
+      else notes.push(note);
+      ctx.graph = buildGraph(notes);
+      // Lexical first: cheap, and it makes the new note findable immediately.
+      ctx.retriever = lexical();
+      if ((choice === "dense" || choice === "fused") && denseModel) {
+        const dense = await buildDenseIndex(notes, denseModel, { root });
+        ctx.retriever = choice === "dense" ? denseRetriever(dense) : fusedRetriever(notes, dense);
+      }
+    },
   };
   if (choice !== "dense" && choice !== "fused") return ctx;
 
@@ -69,6 +104,7 @@ export async function loadBrainContext(
     try {
       const started = Date.now();
       const model = await loadLocalEmbeddingModel({ modelId: opts.model });
+      denseModel = model;
       const dense = await buildDenseIndex(notes, model, { root });
       ctx.retriever = choice === "dense" ? denseRetriever(dense) : fusedRetriever(notes, dense);
       console.error(

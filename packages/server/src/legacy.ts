@@ -4,7 +4,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { BrainContext } from "./context.js";
 import { loadBrainContext, type RetrieverName } from "./context.js";
-import { BRAIN_TOOLS } from "./tools.js";
+import { toolsFor } from "./tools.js";
 
 /**
  * Legacy era: the handshake-based revisions (2025-11-25 and earlier), served by
@@ -16,7 +16,7 @@ export const LEGACY_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26"] as con
 
 export function buildLegacyServer(ctx: BrainContext): McpServer {
   const server = new McpServer({ name: "manent", version: "0.0.1" });
-  for (const tool of BRAIN_TOOLS) {
+  for (const tool of toolsFor(ctx)) {
     server.registerTool(
       tool.name,
       { description: tool.description, inputSchema: tool.inputSchemaZod },
@@ -50,11 +50,17 @@ export async function createBrainServer(
   root: string,
   retriever?: RetrieverName,
   model?: string,
+  writable?: boolean,
 ): Promise<McpServer> {
-  return buildLegacyServer(await loadBrainContext(root, { retriever, model }));
+  return buildLegacyServer(await loadBrainContext(root, { retriever, model, writable }));
 }
 
-export async function serveStdio(root: string, retriever?: RetrieverName, model?: string): Promise<void> {
-  const server = await createBrainServer(root, retriever, model);
+export async function serveStdio(
+  root: string,
+  retriever?: RetrieverName,
+  model?: string,
+  writable?: boolean,
+): Promise<void> {
+  const server = await createBrainServer(root, retriever, model, writable);
   await server.connect(new StdioServerTransport());
 }
