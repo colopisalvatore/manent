@@ -22,6 +22,8 @@ export interface HttpOptions {
   retriever?: RetrieverName;
   /** embedding model id for dense/fused */
   model?: string;
+  /** allow the write tools; off by default — this server is network-reachable */
+  writable?: boolean;
 }
 
 /** Public origin as seen by the client, honouring the tunnel/proxy headers. */
@@ -62,7 +64,7 @@ export async function serveHttp(root: string, opts: HttpOptions): Promise<Server
   if (!opts.token || opts.token.length < 16) {
     throw new Error("http mode requires a token of at least 16 chars (--token or MANENT_HTTP_TOKEN)");
   }
-  const ctx = await loadBrainContext(root, { retriever: opts.retriever, model: opts.model });
+  const ctx = await loadBrainContext(root, { retriever: opts.retriever, model: opts.model, writable: opts.writable });
   const pinned = opts.era ?? "auto";
 
   const httpServer = createServer(async (req, res) => {

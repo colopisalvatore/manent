@@ -85,10 +85,11 @@ program
   )
   .option("--retriever <name>", "ranking: bm25 (default) | fused (best, needs embedding model) | dense | hybrid", "bm25")
   .option("--model <id>", "embedding model for dense/fused")
+  .option("--writable", "enable the write tools (brain_write, brain_append) — off by default")
   .action(
     async (
       dir: string,
-      opts: { http?: string; host: string; token?: string; era: string; retriever: string; model?: string },
+      opts: { http?: string; host: string; token?: string; era: string; retriever: string; model?: string; writable?: boolean },
     ) => {
     const root = resolve(dir);
     const allowed = ["bm25", "hybrid", "dense", "fused"] as const;
@@ -98,8 +99,13 @@ program
       return;
     }
     const retriever = opts.retriever as (typeof allowed)[number];
+    const writable = !!opts.writable;
+    if (writable) {
+      // Said out loud on purpose: an operator who did not mean this should see it.
+      console.error(`[manent] WRITABLE — brain_write and brain_append can modify ${root}`);
+    }
     if (!opts.http) {
-      await serveStdio(root, retriever, opts.model);
+      await serveStdio(root, retriever, opts.model, writable);
       return;
     }
     if (!["auto", "legacy", "modern"].includes(opts.era)) {
@@ -115,6 +121,7 @@ program
         era: opts.era as "auto" | "legacy" | "modern",
         retriever,
         model: opts.model,
+        writable,
       });
     },
   );

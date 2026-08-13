@@ -15,11 +15,15 @@ const ok = (label, cond, extra = "") => {
 
 // Tracks the tool set in packages/server/src/tools.ts. Checked by name, not by a
 // magic count, so adding a tool needs one edit here, not three scattered fixes.
+// These servers start without --writable, so the write tools must NOT be
+// advertised: a read-only vault should not offer a tool that can only fail.
 const EXPECTED_TOOLS = ["brain_search", "brain_read", "brain_neighbors", "brain_list", "brain_read_raw", "brain_grep"];
+const WRITE_TOOLS = ["brain_write", "brain_append"];
 const hasAllTools = (list) =>
   Array.isArray(list) &&
   list.length === EXPECTED_TOOLS.length &&
-  EXPECTED_TOOLS.every((n) => list.some((t) => t.name === n));
+  EXPECTED_TOOLS.every((n) => list.some((t) => t.name === n)) &&
+  WRITE_TOOLS.every((n) => !list.some((t) => t.name === n));
 
 async function withServer(port, era, fn) {
   const args = ["packages/cli/dist/index.js", "serve", VAULT, "--http", String(port), "--token", TOKEN];

@@ -1,5 +1,5 @@
 import type { BrainContext } from "./context.js";
-import { BRAIN_TOOLS, findTool } from "./tools.js";
+import { findTool, toolsFor } from "./tools.js";
 
 /**
  * Modern era: MCP revision 2026-07-28 and later, implemented natively.
@@ -111,7 +111,7 @@ export async function handleModernRequest(
         jsonrpc: "2.0",
         id,
         result: withMeta({
-          tools: BRAIN_TOOLS.map((t) => ({
+          tools: toolsFor(ctx).map((t) => ({
             name: t.name,
             description: t.description,
             inputSchema: t.inputSchemaJson,
