@@ -44,7 +44,7 @@ status: active
 ---
 ```
 
-- `name` MUST equal the filename slug (exception: root-level entry points `MEMORY.md` / `HOME.md` keep conventional uppercase filenames). Wikilinks resolve against `name`.
+- `name` MUST equal the filename slug (exception: root-level entry points `MEMORY.md` / `HOME.md` keep conventional uppercase filenames). Wikilinks resolve against `name` first — see §5.1.
 - `description` is the retrieval surface: one line that lets a ranker judge relevance without opening the note.
 - Unknown extra fields are allowed (`additionalProperties: true`) — forward compatibility.
 - YAML dates parse as Date objects; tools MUST normalize to `YYYY-MM-DD` strings before validation.
@@ -80,10 +80,31 @@ Adding a type = spec PR + minor version bump.
 
 | kind | source | semantics |
 |---|---|---|
-| `wikilink` | `[[name]]` in body | associative link; an unresolved target is NOT an error — it marks a note worth writing |
+| `wikilink` | `[[name]]`, `[[dir/name]]` or `[[../dir/name]]` in body | associative link; an unresolved target is NOT an error — it marks a note worth writing |
 | `provenance` | frontmatter | synthesis → raw source it came from |
 | `supersedes` | frontmatter | this note replaces that one (target should become `status: deprecated`) |
 | `contradicts` | frontmatter | flagged conflict — surfaced for human resolution, never auto-resolved |
+
+### 5.1 Wikilink resolution
+
+A vault is written by a human in an editor and read by a machine through the
+index, and the two do not identify a note the same way: Obsidian resolves
+`[[foo]]` by file name and `[[dir/foo]]` by path, while a note's identity here is
+its canonical `name`. Where those disagree — a note named `moc-syf` living in
+`moc/syf.md` — a link that works in the editor would look broken to the index.
+A resolver MUST therefore try, in order:
+
+1. **canonical `name`**, exact match;
+2. **path relative to the linking note** — `[[../relazioni/denise]]`;
+3. **path from the vault root** — `[[moc/syf]]`;
+4. **file name alone** — `[[denise]]` — when exactly one note carries it, or,
+   when several do, when exactly one of them sits in the linking note's own
+   directory.
+
+A trailing `.md` is ignored at every step. Resolution always yields the target's
+canonical `name`, so the graph stays keyed by name whatever form the link took.
+An ambiguous file name that proximity cannot settle MUST stay unresolved:
+guessing would wire the graph to the wrong note, silently.
 
 ## 6. Lint rules (v0.1)
 
