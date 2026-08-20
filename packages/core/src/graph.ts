@@ -1,3 +1,4 @@
+import { buildLinkIndex, resolveLink } from "./links.js";
 import type { Edge, Graph, Note } from "./types.js";
 import { noteName } from "./vault.js";
 
@@ -9,10 +10,15 @@ export function buildGraph(notes: Note[]): Graph {
     const name = noteName(n);
     if (!nodes.has(name)) nodes.set(name, n);
   }
+  const index = buildLinkIndex(notes);
   const edges: Edge[] = [];
   for (const n of notes) {
     const from = noteName(n);
-    for (const to of n.links) edges.push({ from, to, kind: "wikilink" });
+    for (const to of n.links) {
+      // un link scritto come percorso (`[[moc/ops]]`, `[[../people/rossi]]`)
+      // punta alla stessa nota di quello scritto per nome: stesso arco
+      edges.push({ from, to: resolveLink(index, to, n.relPath) ?? to, kind: "wikilink" });
+    }
     for (const kind of FRONTMATTER_EDGES) {
       const v = n.frontmatter[kind];
       if (!Array.isArray(v)) continue;

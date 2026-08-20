@@ -1,4 +1,4 @@
-import { buildGraph, loadVault, noteName } from "@manent/core";
+import { buildGraph, buildLinkIndex, loadVault, noteName, resolveLink } from "@manent/core";
 import { noteBaseSchema } from "@manent/spec";
 import Ajv2020Module from "ajv/dist/2020.js";
 import addFormatsModule from "ajv-formats";
@@ -45,6 +45,8 @@ export async function lintVault(root: string, opts: LintOptions = {}): Promise<L
   }
 
   const known = new Set(graph.nodes.keys());
+  // stessa risoluzione del grafo: un link scritto come percorso non e rotto
+  const linkIndex = buildLinkIndex(notes);
   const inEdges = new Set<string>();
   const outEdges = new Set<string>();
   for (const e of graph.edges) {
@@ -109,7 +111,7 @@ export async function lintVault(root: string, opts: LintOptions = {}): Promise<L
     }
 
     for (const target of n.links) {
-      if (!known.has(target)) {
+      if (!known.has(target) && !resolveLink(linkIndex, target, n.relPath)) {
         findings.push({
           rule: "link-unresolved",
           severity: opts.strictLinks ? "error" : "warning",
