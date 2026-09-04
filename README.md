@@ -1,19 +1,19 @@
 # Manent
 
-> *Verba volant, scripta manent.* — Spoken words fly away, written words remain.
+> *Verba volant, scripta manent.* Spoken words fly away, written words remain.
 
-**File-first, git-versioned memory for AI agents.** A specification plus a toolchain that turns a plain Markdown vault (Obsidian-compatible) into a queryable, lintable, MCP-served brain that any agent can mount — and that several agents with different clearances can share.
+**File-first, git-versioned memory for AI agents.** A specification plus a toolchain that turns a plain Markdown vault (Obsidian-compatible) into a queryable, lintable, MCP-served brain that any agent can mount, and that several agents with different clearances can share.
 
-Context windows evaporate — *verba volant*. Manent is the written memory that remains: plain files you can read, diff, and own.
+Context windows evaporate: *verba volant*. Manent is the written memory that remains: plain files you can read, diff, and own.
 
 ## Why
 
 Agent memory today is either a proprietary vector-DB dump (lock-in, no audit trail, no human curation) or an unstructured pile of notes (no schema, no retrieval quality, no guarantees). Manent takes a third path:
 
-- **Markdown files are the source of truth.** Everything else — search indexes, graphs, embeddings — is derived and rebuildable from scratch.
+- **Markdown files are the source of truth.** Everything else (search indexes, graphs, embeddings) is derived and rebuildable from scratch.
 - **Git is the sync and audit backbone.** Every memory write is a commit: who, when, why.
-- **A closed, versioned schema** (JSON Schema 2020-12) for note types and typed edges. Linted in CI — a malformed note never lands.
-- **MCP is the access layer.** Any MCP client (Claude, ChatGPT, VS Code, Cursor, your own agent) mounts the brain with a URL — no custom SDK.
+- **A closed, versioned schema** (JSON Schema 2020-12) for note types and typed edges. Linted in CI, so a malformed note never lands.
+- **MCP is the access layer.** Any MCP client (Claude, ChatGPT, VS Code, Cursor, your own agent) mounts the brain with a URL, no custom SDK.
 - **Identity decides visibility, before ranking.** Each agent reads the vault through a view built from the notes it may see; a note that says nothing about its audience is private.
 
 ## Packages
@@ -25,7 +25,7 @@ Agent memory today is either a proprietary vector-DB dump (lock-in, no audit tra
 | `@manent/retrieval` | Ranking: BM25 lexical, local dense embeddings, graph expansion, RRF fusion, status demotion |
 | `@manent/eval` | Eval harness: golden sets, recall@k / MRR / nDCG, regression gate |
 | `@manent/lint` | Rule engine: schema, links, duplicates, orphans, personal data, model-directed text, audience labels |
-| `@manent/server` | MCP server over a vault: read tools, gated write tools, gap register, identities, audit, hot reload — see [Protocol eras](#protocol-eras) |
+| `@manent/server` | MCP server over a vault: read tools, gated write tools, gap register, identities, audit, hot reload; see [Protocol eras](#protocol-eras) |
 | `@manent/cli` | `manent init | lint | eval | serve | gaps` |
 
 ## Quickstart
@@ -40,13 +40,13 @@ node packages/cli/dist/index.js init my-vault
 # lint it
 node packages/cli/dist/index.js lint my-vault
 
-# serve it over MCP (stdio) — re-indexes on every edit
+# serve it over MCP (stdio); re-indexes on every edit
 node packages/cli/dist/index.js serve my-vault
 
 # or over Streamable HTTP with bearer auth (for remote clients / claude.ai)
 node packages/cli/dist/index.js serve my-vault --http 3939 --token <long-random-token>
 
-# with the gap register (needs Node ≥ 22.5), an audit log and agent identities
+# with the gap register (needs Node 22.5 or newer), an audit log and agent identities
 node packages/cli/dist/index.js serve my-vault --http 3939 --token <token> \
   --gaps ~/manent/gaps.sqlite --audit ~/manent/audit.jsonl --agents agents.json --writable
 ```
@@ -61,11 +61,11 @@ claude mcp add mybrain -- node <repo>/packages/cli/dist/index.js serve <vault>
 
 Verified working. claude.ai will not connect to a remote MCP server that has no discoverable
 OAuth metadata, so the HTTP server ships its own single-owner authorization server: your vault
-token is the login password — or an agent's token, to connect as that agent.
+token is the login password, or an agent's token, to connect as that agent.
 
-1. Serve over HTTP and expose it — a tunnel (`cloudflared tunnel --url http://127.0.0.1:3939`)
+1. Serve over HTTP and expose it: a tunnel (`cloudflared tunnel --url http://127.0.0.1:3939`)
    or a reverse proxy. HTTPS is required by OAuth for non-localhost redirects.
-2. claude.ai → Settings → Connectors → Add custom connector → URL `https://<your-host>/mcp`.
+2. claude.ai, Settings, Connectors, Add custom connector, URL `https://<your-host>/mcp`.
    Leave the OAuth Client ID empty; discovery and registration are automatic.
 3. claude.ai opens the consent page. Paste your token, approve, done.
 
@@ -76,12 +76,12 @@ owner's.
 
 Three details worth knowing:
 
-- The endpoint binds `127.0.0.1` by default and refuses to start without a token — a vault never
+- The endpoint binds `127.0.0.1` by default and refuses to start without a token: a vault never
   reaches the network unauthenticated by accident.
 - Redirect URIs are restricted to an allowlist (`claude.ai`, `claude.com`, localhost) and must be
   HTTPS. PKCE S256 is mandatory; authorization codes are single-use and expire in five minutes.
 - `/t/<token>/mcp` also works for clients that can neither set headers nor do OAuth. That URL
-  **is** a credential — treat it like a password.
+  **is** a credential; treat it like a password.
 
 Run `npm run test:oauth` to exercise the whole flow, including wrong token, failed PKCE, code
 replay, forged token and disallowed redirect.
@@ -90,16 +90,16 @@ replay, forged token and disallowed redirect.
 
 | Tool | What |
 |---|---|
-| `brain_search` | ranked search → `{searchId, query, hits}` |
+| `brain_search` | ranked search, returns `{searchId, query, hits}` |
 | `brain_read` / `brain_read_raw` | a note, parsed or verbatim |
 | `brain_neighbors` | the notes linked to a note, up to 3 hops |
 | `brain_list` / `brain_grep` | enumerate, or regex over bodies |
-| `brain_feedback` | "this answer was wrong / outdated / incomplete / helpful" — see [The gap register](#the-gap-register) |
-| `brain_write` / `brain_append` | listed only with `--writable`; gated, stamped, approved — see [Writes](#writes-the-gate-quarantine-and-approval) |
+| `brain_feedback` | "this answer was wrong / outdated / incomplete / helpful"; see [The gap register](#the-gap-register) |
+| `brain_write` / `brain_append` | listed only with `--writable`; gated, stamped, approved; see [Writes](#writes-the-gate-quarantine-and-approval) |
 
 Every tool runs on the caller's **view** of the vault. That is the whole access model, and it is
 worth stating once: a view is built from the notes the caller may read *before* any index exists
-over it, so `brain_grep` and `brain_read_raw` — which never touch the ranker — cannot reach a note
+over it, so `brain_grep` and `brain_read_raw`, which never touch the ranker, cannot reach a note
 the ranker would have hidden. Filtering after ranking would leave them wide open.
 
 ## One vault, several agents
@@ -123,7 +123,7 @@ session):
 - The vault token is the **owner**. The `--agents` file, the vault token, and the OAuth tokens
   minted for either all resolve to an identity that travels with every call.
 
-**Visibility** is a property of the note, in its frontmatter — not of the folder, because the
+**Visibility** is a property of the note, in its frontmatter, not of the folder, because the
 same note often serves two audiences:
 
 ```yaml
@@ -131,13 +131,13 @@ audience: [tech, product]   # who may read it
 ```
 
 Absent or empty means **private**: the most restrictive reading, on purpose. A note written
-without thinking about it cannot become visible by accident — the same principle as `secrets/`.
+without thinking about it cannot become visible by accident, the same principle as `secrets/`.
 `public` is the one reserved label that may leave the organisation; every other label is the
 vault's own, and `manent lint --audiences tech,business,product` closes the set: an unknown
 label is reported, and until fixed it makes a note *less* visible, never more, because no scope
 names it.
 
-**Audit**: `--audit <file>` appends one JSONL line per tool call — timestamp, identity, tool,
+**Audit**: `--audit <file>` appends one JSONL line per tool call: timestamp, identity, tool,
 redacted arguments, result names, elapsed. Enough to reconstruct an incident; not enough to
 reconstruct a customer.
 
@@ -152,48 +152,48 @@ otherwise. When they are on:
 1. **The gate.** Every write is scanned before anything touches the disk. Text that carries
    personal data (email, phone, IBAN, card, national id) or reads as an instruction aimed at a
    model ("ignore previous instructions", hidden HTML directives, zero-width characters) is
-   refused with the reason. A vault lives in git and git history is forever — the check is
+   refused with the reason. A vault lives in git and git history is forever, so the check is
    before storage, not a cleanup afterwards; and a knowledge base that agents with tools read must
    not be a place where an outsider's words can become instructions.
 2. **Quarantine.** An agent's write lands in the directory it was granted and nowhere else,
-   stamped `status: quarantine`, `author: <agent>`, `audience: [private]` — whatever the call
-   asked for. Quarantined notes rank below active ones (×0.5) and are visible to the owner only,
+   stamped `status: quarantine`, `author: <agent>`, `audience: [private]`, whatever the call
+   asked for. Quarantined notes rank below active ones (score halved) and are visible to the owner only,
    who promotes them by editing status and audience: a commit with a name on it. The owner's
    writes keep their folder and audience, and get `author: owner`.
 3. **Approval.** On MCP 2026-07-28 the write does not complete on the first call: it answers
    `resultType: "input_required"` with an elicitation form that shows the note, and completes
    on the retry that carries the person's confirmation (`inputResponses`). The request state is a
-   fingerprint of what was proposed — an altered retry is asked again, not trusted. The agent
+   fingerprint of what was proposed, so an altered retry is asked again instead of trusted. The agent
    proposes, the person confirms, in the standard's own primitive. Clients that cannot ask (the
    handshake eras, clients without the elicitation capability) fall through: the owner's write
    goes straight through as before, an agent's goes to quarantine.
 
 ## The gap register
 
-To learn from the people asking, the brain does not need their text — it needs to know **which
+To learn from the people asking, the brain does not need their text; it needs to know **which
 questions it could not answer**. `--gaps <sqlite file>` records every `brain_search`, redacted,
 into a file *outside* the vault (a gap is not a fact; and unlike the embedding cache it is
-observed, not derived — losing it loses weeks of real questions). Two signals carry the weight:
+observed, not derived; losing it loses weeks of real questions). Two signals carry the weight:
 
-- **followed** — a search that no `brain_read` of one of its results follows, from the same
+- **followed**: a search that no `brain_read` of one of its results follows, from the same
   identity within ten minutes, is a search that did not help. The server sees that alone.
-- **count** — rows group by meaning through the ranker's own embedding model, so paraphrases
+- **count**: rows group by meaning through the ranker's own embedding model, so paraphrases
   collapse into one line; by normalized words until the model is warm. Threshold 0.9, measured on
-  `multilingual-e5-small`: paraphrases scored 0.908–0.943, unrelated questions 0.752–0.835
+  `multilingual-e5-small`: paraphrases scored 0.908 to 0.943, unrelated questions 0.752 to 0.835
   (`--gaps-threshold` to tune).
 
 The caller recorded is the **agent**, never a person: the register is free of personal data by
-construction, not by discipline. It is a queue, not a memory — its job is to be emptied:
+construction, not by discipline. It is a queue, not a memory; its job is to be emptied:
 
 ```
 manent gaps <vault> --gaps gaps.sqlite                       # open gaps, by asked − read
-manent gaps <vault> --gaps gaps.sqlite --show g_…            # the searches behind one
-manent gaps <vault> --gaps gaps.sqlite --close g_… --note <name> --golden eval/golden.json
-manent gaps <vault> --gaps gaps.sqlite --dismiss g_…         # not a real question
+manent gaps <vault> --gaps gaps.sqlite --show g_<id>            # the searches behind one
+manent gaps <vault> --gaps gaps.sqlite --close g_<id> --note <name> --golden eval/golden.json
+manent gaps <vault> --gaps gaps.sqlite --dismiss g_<id>         # not a real question
 manent gaps <vault> --gaps gaps.sqlite --feedback            # what agents reported
 ```
 
-**Closing a gap with the note that answers it emits a golden-set entry** — the question as the
+**Closing a gap with the note that answers it emits a golden-set entry**: the question as the
 asker phrased it, the note the curator wrote: an `oblique` query by construction. That is the
 set the eval is weakest on (MRR 0.208) and the one that had to be written by hand imagining how
 someone else would ask. The register manufactures it from real use, and the regression gate then
@@ -201,7 +201,7 @@ keeps every closed gap reachable when the ranker changes.
 
 The register sees what was *missing*. It cannot see "there, but wrong": a confident wrong answer
 arrives with a high score and a read, and looks like a success. Only the agent or the person can
-say so — that is `brain_feedback` (verdict, note, searchId, outcome), filed next to the question
+say so; that is `brain_feedback` (verdict, note, searchId, outcome), filed next to the question
 it came from.
 
 ## Hot reload
@@ -221,7 +221,7 @@ retriever against three kinds of query, and each kind answers a different questi
 | Source | How it's built | What it measures |
 |---|---|---|
 | `curated` | hand written, wording close to the note | lexical recall |
-| `oblique` | asks for the concept **without** the note's words | semantic recall — the hard case |
+| `oblique` | asks for the concept **without** the note's words | semantic recall, the hard case |
 | `auto` | derived from each note's own description | broad regression signal, no labelling |
 
 ```
@@ -234,7 +234,7 @@ Results on a real 305-note vault (298 queries), in the order they were measured:
 
 | Ranker | curated hit@1 | curated MRR | oblique MRR | auto hit@1 |
 |---|---|---|---|---|
-| BM25, naive tokenizer | 45.0% | 0.621 | — | 97.8% |
+| BM25, naive tokenizer | 45.0% | 0.621 | n/a | 97.8% |
 | BM25 + stopwords, length-gated prefix/fuzzy | 75.0% | 0.863 | 0.099 | **97.8%** |
 | Hybrid (graph expansion + recency + centrality) | 75.0% | 0.863 | 0.104 | 93.0% |
 | Dense only (multilingual-e5-small, local) | 95.0% | 0.975 | 0.131 | 94.4% |
@@ -244,22 +244,22 @@ Five findings worth keeping:
 
 1. **Tokenization was the first big win.** Dropping stopwords and allowing prefix/fuzzy matching
    only on longer terms moved curated hit@1 by 30 points. With prefix matching on, `di` matches
-   *diritto*, *disposizione*, *documento* — long notes then win on accumulated noise.
+   *diritto*, *disposizione*, *documento*; long notes then win on accumulated noise.
 2. **Graph expansion did not pay.** Once retrieval is lexically sound, Personalized PageRank over
    wikilinks adds nothing measurable and the recency/centrality multipliers cost ~5 points on the
    auto set. `hybrid` stays available for vaults with a much denser link structure. PPR amplifies a
-   good seed — it cannot create one.
+   good seed; it cannot create one.
 3. **Lexical and dense fail in opposite directions, so fusing them beats both.** Dense alone found
    the notes BM25 missed but blurred exact slugs and identifiers; at equal RRF weights the lexical
    list pulled correct answers off the top spot. Weighting dense twice reached 100% hit@1 on
    hand-written queries, trading ~2 points on the synthetic set.
-4. **Vocabulary mismatch is improved, not solved**: `oblique` MRR went 0.099 → 0.208 and recall@5
-   25% → 37.5%. A question whose wording shares nothing with its note is still often unreachable —
+4. **Vocabulary mismatch is improved, not solved**: `oblique` MRR went from 0.099 to 0.208 and recall@5
+   from 25% to 37.5%. A question whose wording shares nothing with its note is still often unreachable,
    which is what the gap register is for.
 5. **Chunking made it worse here, and that is informative.** Splitting notes into passages was the
-   obvious next step; measured, it cost 10–15 points of curated hit@1. With ~2400 passages instead
+   obvious next step; measured, it cost 10 to 15 points of curated hit@1. With ~2400 passages instead
    of 307 notes, max-scoring gives a long note one chance per passage to match by luck, so retros
-   and legal texts float up — the same length bias BM25 normalizes away. Damping by passage count
+   and legal texts float up, the same length bias BM25 normalizes away. Damping by passage count
    (`max-norm`) recovers oblique recall (MRR 0.221) but still trades away curated and auto accuracy.
 
 | Passages | curated hit@1 | oblique MRR | auto hit@1 | Configuration |
@@ -268,25 +268,28 @@ Five findings worth keeping:
 | 2419 | 90.0% | 0.096 | 96.3% | 1000-char passages, best-passage scoring |
 | 2419 | 85.0% | **0.221** | 91.9% | 1000-char passages, length-damped |
 | 1181 | 75.0% | 0.013 | 95.9% | 2000-char passages, best-passage |
-| 1181 | 55–75% | ≤0.19 | 73–79% | any size, **without** the contextual prefix |
+| 1181 | 55 to 75% | at most 0.19 | 73 to 79% | any size, **without** the contextual prefix |
 
-   Two things to keep from that: the **contextual prefix is not optional** — a passage stripped of
+   Two things to keep from that: the **contextual prefix is not optional**: a passage stripped of
    its note's name and description loses the subject and everything collapses; and **truncation
    beats completeness** on this corpus (1400-char single passage scored 100%, full body 95%).
-   Notes here are atomic and front-loaded — one fact each, stated at the top — so the tail is
+   Notes here are atomic and front-loaded, one fact each, stated at the top, so the tail is
    elaboration that only blurs the vector. Raise `maxPassages` for vaults of long, multi-topic
    documents, where the answer can sit in the middle of a note.
 
-Every ranker is wrapped by **status demotion**: `quarantine` and `deprecated` notes score ×0.5,
-`archived` ×0.25, on the server and in the eval alike, so what is measured is what ships. On a
+Every ranker is wrapped by **status demotion**: `quarantine` and `deprecated` notes keep half their score,
+`archived` a quarter, on the server and in the eval alike, so what is measured is what ships. On a
 vault with no such notes the wrapper is a no-op (regression gate: no change).
+
+The September 2026 re-measurement on the grown vault (479 notes) is in `paper/`; it moved some of
+these numbers, and the paper says how.
 
 Reproduce any sweep: `scripts/tune-retrieval.mjs` (graph/scoring params), `scripts/tune-fusion.mjs`
 (lexical/dense balance), `scripts/tune-chunking.mjs` (passage size, prefix, aggregation).
 
 ### Dense retrieval setup
 
-Embeddings run **locally** — no API key, nothing leaves the machine, and query time needs no
+Embeddings run **locally**: no API key, nothing leaves the machine, and query time needs no
 network. The model is an optional dependency, so `bm25` keeps working without it:
 
 ```
@@ -297,7 +300,7 @@ manent eval <vault> --golden ... --retriever all
 
 Vectors are cached in `<vault>/.manent/embeddings.json`, keyed by content hash: editing one note
 re-embeds one note. Changing the model invalidates the cache. `manent init` gitignores that
-directory — it is derived data, rebuildable from the notes.
+directory; it is derived data, rebuildable from the notes.
 
 ## Lint as the gate
 
@@ -334,7 +337,7 @@ manent serve <vault> --http 3939 --era modern   # pin: 2026-07-28 only
 ```
 
 Auto-detection keys on the RPC itself (`server/discover`, `subscriptions/listen`) or a declared
-2026+ protocol version — never on the `Mcp-Method` transport header alone, since dual-era clients
+2026+ protocol version, never on the `Mcp-Method` transport header alone, since dual-era clients
 send it with a legacy `initialize` too. `npm run test:era` exercises all three modes.
 
 ## Vault layout (see `packages/spec/SPEC.md`)
@@ -357,8 +360,8 @@ vault/
 ## Tests
 
 ```
-npm run smoke          # init → lint → search
-npm run probe          # stdio: initialize → tools/list → brain_search
+npm run smoke          # init, lint, search
+npm run probe          # stdio: initialize, tools/list, brain_search
 npm run test:era       # both protocol eras, pinned and auto-routed
 npm run test:oauth     # the whole OAuth flow and its refusals
 npm run test:write     # write tools: gate and path containment
@@ -377,16 +380,16 @@ Done, in the order it was built:
 - [x] Spec v0.1 + lint + graph + BM25 search + MCP stdio server
 - [x] Eval harness: three query kinds, recall@k / MRR / nDCG, regression gate
 - [x] Lexical retrieval done properly (stopwords, length-gated prefix/fuzzy): +30 pts hit@1
-- [x] Graph expansion (Personalized PageRank) + RRF fusion — built, measured, **not** default
-- [x] Local dense embeddings + RRF fusion: curated hit@1 75% → 100%, oblique MRR 0.10 → 0.21
-- [x] Chunk-level embeddings — implemented, measured, **not** default: worse on atomic notes
+- [x] Graph expansion (Personalized PageRank) + RRF fusion: built, measured, **not** default
+- [x] Local dense embeddings + RRF fusion: curated hit@1 from 75% to 100%, oblique MRR from 0.10 to 0.21
+- [x] Chunk-level embeddings: implemented, measured, **not** default; worse on atomic notes
 - [x] Streamable HTTP transport, stateless, bearer-token auth
-- [x] OAuth 2.1 (RFC 9728 metadata, dynamic registration, PKCE) — connects from claude.ai
+- [x] OAuth 2.1 (RFC 9728 metadata, dynamic registration, PKCE); connects from claude.ai
 - [x] Two protocol eras as separate implementations: legacy handshake (SDK) and native 2026-07-28
 - [x] Read tools beyond search: `brain_list`, `brain_read_raw`, `brain_grep`
 - [x] Write tools, off unless the operator opts in
-- [x] Wikilinks resolved by name, path and file name — the vault reads the same in Obsidian and here
-- [x] **Gap register**: unanswered searches → work list by frequency → `oblique` golden set on closure
+- [x] Wikilinks resolved by name, path and file name, so the vault reads the same in Obsidian and here
+- [x] **Gap register**: unanswered searches become a work list by frequency, then `oblique` golden-set entries on closure
 - [x] **Spec v0.2**: `audience`, `author`, `status: quarantine`; `status` consumed by ranking
 - [x] **Identities** (`--agents`), visibility filtered at load, per-identity views on every tool
 - [x] **Write gate** (personal data, model-directed text), quarantine for agents, `--audit`
@@ -397,17 +400,17 @@ Done, in the order it was built:
 
 Next, in the order it should be built:
 
-- [ ] **Promotion tooling**: `manent promote <note>` — out of quarantine with status, audience and
+- [ ] **Promotion tooling**: `manent promote <note>`: out of quarantine with status, audience and
       a commit message in one move; a review queue of quarantined notes by age and author
 - [ ] **Curation**: embedding-cluster dedup, contradiction detection (`contradicts` surfaced, never
-      auto-resolved), Leiden communities → MOC suggestions — fed by the gap register's numbers,
+      auto-resolved), Leiden communities as MOC suggestions, fed by the gap register's numbers,
       not by intuition
-- [ ] **Git-backed deploy recipe**: `post-receive` → checkout → lint gate → the watcher does the
+- [ ] **Git-backed deploy recipe**: `post-receive`, then checkout, then the lint gate; the watcher does the
       rest; identities and audit paths as a documented server layout
 - [ ] npm publish + GitHub Actions (build, smoke, tests, eval gate on a fixture vault)
-- [ ] Tasks extension (`io.modelcontextprotocol/tasks`) on the modern path — long-running skills
+- [ ] Tasks extension (`io.modelcontextprotocol/tasks`) on the modern path, for long-running skills
 - [ ] MCP Apps (`ui://`): skill launcher, quarantine review queue, gap register, graph explorer
-- [ ] MCP spec 2026-07-28 wire upgrade on the legacy path — when the official SDK ships it
+- [ ] MCP spec 2026-07-28 wire upgrade on the legacy path, when the official SDK ships it
 
 Open questions the code does not settle: who owns the brain infrastructure once four agents
 depend on it; which audience labels a given organisation wants (the spec reserves `private` and
@@ -415,4 +418,4 @@ depend on it; which audience labels a given organisation wants (the spec reserve
 
 ## License
 
-Apache-2.0 — see [LICENSE](LICENSE).
+Apache-2.0; see [LICENSE](LICENSE).

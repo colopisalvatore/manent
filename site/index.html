@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Manent — memoria file-first, versionata in git, per agenti AI</title>
+<title>Manent: memoria file-first, versionata in git, per agenti AI</title>
 <meta name="description" content="Manent: un vault Markdown (Obsidian-compatibile) diventa una memoria interrogabile, lintata e servita via MCP a qualunque agente AI. Retrieval misurato, identità per agente, registro dei buchi. Open source, Apache-2.0.">
-<meta property="og:title" content="Manent — verba volant, scripta manent">
+<meta property="og:title" content="Manent, verba volant scripta manent">
 <meta property="og:description" content="Memoria file-first e versionata in git per agenti AI. Spec, eval harness, server MCP. Open source.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://salvatorecolopi.com/manent/">
@@ -103,7 +103,7 @@
     <h1>Manent: la memoria degli agenti AI come <em>file che restano</em></h1>
     <p class="lead">Un vault Markdown (Obsidian-compatibile), versionato in git, diventa una memoria interrogabile, lintata e servita via MCP a qualunque agente: Claude, ChatGPT, Cursor, il vostro. Niente database proprietario, niente lock-in. Il retrieval è deciso a numeri, non a intuito.</p>
     <div class="cta">
-      <a class="btn primary" href="https://github.com/colopisalvatore/manent">Codice su GitHub · Apache-2.0</a>
+      <a class="btn primary" href="https://github.com/colopisalvatore/manent">Codice su GitHub (Apache-2.0)</a>
       <a class="btn" href="manent-paper.pdf">Leggi il paper (PDF)</a>
       <a class="btn" href="#usa">Provalo in 3 comandi</a>
     </div>
@@ -125,7 +125,7 @@
     <h2>Dal file all'agente, in cinque pezzi</h2>
     <p class="sub">Ogni pezzo è un package del monorepo TypeScript. Tutto ricostruibile dai file.</p>
     <figure>
-      <svg viewBox="0 0 900 250" width="100%" role="img" aria-label="Architettura: vault Markdown → lint → indici derivati → server MCP → viste per identità → agenti">
+      <svg viewBox="0 0 900 250" width="100%" role="img" aria-label="Architettura: vault Markdown, lint, indici derivati, server MCP, viste per identità, agenti">
         <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="hsl(210 10% 52%)"/></marker></defs>
         <g font-size="14" fill="hsl(210 20% 92%)">
           <rect x="10" y="60" width="150" height="120" rx="10" fill="hsl(220 15% 8%)" stroke="hsl(165 80% 45%)"/>
@@ -137,32 +137,32 @@
           <line x1="160" y1="120" x2="205" y2="120" stroke="hsl(210 10% 52%)" stroke-width="2" marker-end="url(#arr)"/>
           <rect x="210" y="60" width="120" height="120" rx="10" fill="hsl(220 15% 8%)" stroke="hsl(220 12% 28%)"/>
           <text x="270" y="95" text-anchor="middle" font-weight="700">Lint</text>
-          <text x="270" y="118" text-anchor="middle" fill="hsl(210 12% 70%)" font-size="12">schema · link · PII</text>
-          <text x="270" y="136" text-anchor="middle" fill="hsl(210 12% 70%)" font-size="12">injection · audience</text>
+          <text x="270" y="118" text-anchor="middle" fill="hsl(210 12% 70%)" font-size="12">schema, link, PII</text>
+          <text x="270" y="136" text-anchor="middle" fill="hsl(210 12% 70%)" font-size="12">injection, audience</text>
           <text x="270" y="160" text-anchor="middle" fill="hsl(210 12% 70%)" font-size="12">cancello in CI</text>
 
           <line x1="330" y1="120" x2="375" y2="120" stroke="hsl(210 10% 52%)" stroke-width="2" marker-end="url(#arr)"/>
           <rect x="380" y="60" width="150" height="120" rx="10" fill="hsl(220 15% 8%)" stroke="hsl(220 12% 28%)"/>
           <text x="455" y="95" text-anchor="middle" font-weight="700">Indici derivati</text>
           <text x="455" y="118" text-anchor="middle" fill="hsl(210 12% 70%)" font-size="12">BM25 + embedding locali</text>
-          <text x="455" y="136" text-anchor="middle" fill="hsl(210 12% 70%)" font-size="12">fusione RRF · grafo</text>
+          <text x="455" y="136" text-anchor="middle" fill="hsl(210 12% 70%)" font-size="12">fusione RRF, grafo</text>
           <text x="455" y="160" text-anchor="middle" fill="hsl(210 12% 70%)" font-size="12">hot reload</text>
 
           <line x1="530" y1="120" x2="575" y2="120" stroke="hsl(210 10% 52%)" stroke-width="2" marker-end="url(#arr)"/>
           <rect x="580" y="60" width="150" height="120" rx="10" fill="hsl(220 15% 8%)" stroke="hsl(165 80% 45%)"/>
           <text x="655" y="95" text-anchor="middle" font-weight="700">Server MCP</text>
-          <text x="655" y="118" text-anchor="middle" fill="hsl(210 12% 70%)" font-size="12">identità → vista</text>
-          <text x="655" y="136" text-anchor="middle" fill="hsl(210 12% 70%)" font-size="12">OAuth 2.1 · audit</text>
+          <text x="655" y="118" text-anchor="middle" fill="hsl(210 12% 70%)" font-size="12">dall'identità alla vista</text>
+          <text x="655" y="136" text-anchor="middle" fill="hsl(210 12% 70%)" font-size="12">OAuth 2.1, audit</text>
           <text x="655" y="160" text-anchor="middle" fill="hsl(210 12% 70%)" font-size="12">registro dei buchi</text>
 
           <line x1="730" y1="120" x2="775" y2="120" stroke="hsl(210 10% 52%)" stroke-width="2" marker-end="url(#arr)"/>
-          <rect x="780" y="40" width="110" height="40" rx="8" fill="hsl(220 14% 11%)" stroke="hsl(220 12% 28%)"/><text x="835" y="65" text-anchor="middle" font-size="12">Claude · ChatGPT</text>
+          <rect x="780" y="40" width="110" height="40" rx="8" fill="hsl(220 14% 11%)" stroke="hsl(220 12% 28%)"/><text x="835" y="65" text-anchor="middle" font-size="12">Claude, ChatGPT</text>
           <rect x="780" y="100" width="110" height="40" rx="8" fill="hsl(220 14% 11%)" stroke="hsl(220 12% 28%)"/><text x="835" y="125" text-anchor="middle" font-size="12">customer care</text>
           <rect x="780" y="160" width="110" height="40" rx="8" fill="hsl(220 14% 11%)" stroke="hsl(220 12% 28%)"/><text x="835" y="185" text-anchor="middle" font-size="12">agenti di coding</text>
           <text x="450" y="228" text-anchor="middle" fill="hsl(210 10% 52%)" font-size="12">Tutto a destra del vault è derivato: si può cancellare e ricostruire dai file, in ogni momento.</text>
         </g>
       </svg>
-      <figcaption>La catena: Obsidian in locale → repo git → lint come cancello → indici → server MCP che valida l'identità, filtra per pubblico e scrive l'audit.</figcaption>
+      <figcaption>La catena: Obsidian in locale, poi il repo git, il lint come cancello, gli indici, e il server MCP che valida l'identità, filtra per pubblico e scrive l'audit.</figcaption>
     </figure>
     <div class="grid">
       <div class="card"><h3>Spec v0.2</h3><p>Undici tipi di nota, frontmatter con schema JSON 2020-12, archi tipizzati (<code>provenance</code>, <code>supersedes</code>, <code>contradicts</code>), campo <code>audience</code> per la visibilità. Il codice segue la spec, mai il contrario.</p></div>
@@ -192,7 +192,7 @@
       <li><strong>Il tokenizer valeva 35 punti.</strong> Stopword tolte e prefix/fuzzy attivi solo su termini lunghi: da 35% a 70% di hit@1 prima di qualsiasi cosa «intelligente». Con il prefix sempre attivo, <code>di</code> matcha <em>diritto</em>, <em>disposizione</em>, <em>documento</em> e le note lunghe vincono per rumore accumulato.</li>
       <li><strong>Il grafo non paga.</strong> Personalized PageRank sui wikilink: zero guadagno sulle query curate, ~5 punti persi sulle automatiche. PPR amplifica un seed buono, non lo crea. Resta opt-in.</li>
       <li><strong>Lessicale e denso sbagliano in direzioni opposte</strong>, quindi fonderli batte entrambi: 70% e 80% da soli, 90% fusi. Il bilanciamento va rimisurato quando il vault cresce: ad agosto il denso a peso doppio batteva i pesi pari di 20 punti, sul vault di settembre pareggiano. Con l'harness è un comando, non una decisione.</li>
-      <li><strong>Il chunking ingenuo peggiora.</strong> Spezzare ogni nota in passaggi con max-pooling regala a ogni nota lunga una chance per passaggio di matchare per caso: ad agosto costava 10–15 punti di hit@1, a settembre azzera la recall obliqua (MRR 0,181 → 0,038). Un'aggregazione corretta per lunghezza o pochi passaggi per nota lo recuperano; il prefisso contestuale (titolo + descrizione su ogni chunk) resta obbligatorio, senza crolla tutto.</li>
+      <li><strong>Il chunking ingenuo peggiora.</strong> Spezzare ogni nota in passaggi con max-pooling regala a ogni nota lunga una chance per passaggio di matchare per caso: ad agosto costava da 10 a 15 punti di hit@1, a settembre azzera la recall obliqua (MRR da 0,181 a 0,038). Un'aggregazione corretta per lunghezza o pochi passaggi per nota lo recuperano; il prefisso contestuale (titolo + descrizione su ogni chunk) resta obbligatorio, senza crolla tutto.</li>
     </ol>
   </section>
 
@@ -201,7 +201,7 @@
     <h2>Chi legge cosa, chi scrive dove, e cosa il brain non sa</h2>
     <p class="sub">Dal vault personale al cervello aziendale: customer care, agenti di coding, direzione. Stesso vault, non stessa vista.</p>
     <div class="grid">
-      <div class="card"><h3>Identità → vista, prima dell'indice</h3><p>Ogni credenziale (token del vault, token di un agente, OAuth per entrambi) diventa un'identità. La sua vista è costruita dalle note che può leggere <strong>prima</strong> che esista un indice: search, grep, lettura grezza e vicinato non possono scavalcare il filtro, perché per quel lettore la nota non è mai stata caricata.</p></div>
+      <div class="card"><h3>Dall'identità alla vista, prima dell'indice</h3><p>Ogni credenziale (token del vault, token di un agente, OAuth per entrambi) diventa un'identità. La sua vista è costruita dalle note che può leggere <strong>prima</strong> che esista un indice: search, grep, lettura grezza e vicinato non possono scavalcare il filtro, perché per quel lettore la nota non è mai stata caricata.</p></div>
       <div class="card"><h3>Privato per default</h3><p>La visibilità sta nel frontmatter (<code>audience: [tech, product]</code>), non nella cartella: la stessa nota serve a due pubblici. Una nota che non dice nulla è privata. Un refuso rende una nota <em>meno</em> visibile, mai di più.</p></div>
       <div class="card"><h3>Scritture in quarantena, con conferma</h3><p>Ogni scrittura è scansionata prima del disco: dati personali o testo che «parla al modello» vengono rifiutati (git è per sempre). Le note degli agenti finiscono in quarantena, private, finché una persona le promuove. Su MCP 2026-07-28 la scrittura chiede conferma con <code>input_required</code>: l'agente propone, la persona conferma.</p></div>
       <div class="card"><h3>Il registro dei buchi</h3><p>Per imparare da chi chiede non serve il suo testo: serve sapere <strong>quali domande sono rimaste senza risposta</strong>. Ogni ricerca è registrata redatta e raggruppata per significato; una lettura che segue la marca «utile». Chiudere un buco con una nota produce una query del golden set che nessuno riuscirebbe a scrivere a mano.</p></div>
@@ -211,7 +211,7 @@
   <section id="usa">
     <span class="kicker">Quickstart</span>
     <h2>Provalo in tre comandi</h2>
-    <p class="sub">Node ≥ 20 (≥ 22.5 per il registro dei buchi). Nessuna chiave API.</p>
+    <p class="sub">Node 20 o più recente (22.5 per il registro dei buchi). Nessuna chiave API.</p>
 <pre><code>git clone https://github.com/colopisalvatore/manent &amp;&amp; cd manent
 npm install &amp;&amp; npm run build
 node packages/cli/dist/index.js init my-vault      # scaffold di un vault
@@ -245,21 +245,21 @@ node packages/cli/dist/index.js serve my-vault --http 3939 --token &lt;token&gt;
       <li>Embedding locali + fusione RRF</li>
       <li>HTTP stateless, OAuth 2.1, collegamento da claude.ai</li>
       <li>Due ere di protocollo come implementazioni separate</li>
-      <li>Registro dei buchi → golden set «oblique»</li>
+      <li>Registro dei buchi che produce il golden set «oblique»</li>
       <li>Spec v0.2: audience, author, quarantena</li>
       <li>Identità per agente, viste filtrate prima dell'indice, audit</li>
       <li>Scrittura dietro conferma (<code>input_required</code>)</li>
       <li>Hot reload del vault</li>
       <li class="todo">Promozione dalla quarantena (<code>manent promote</code>)</li>
-      <li class="todo">Curation: dedup per cluster, contraddizioni, comunità → MOC</li>
-      <li class="todo">Ricetta di deploy git-backed (post-receive → lint gate)</li>
+      <li class="todo">Curation: dedup per cluster, contraddizioni, comunità come proposte di MOC</li>
+      <li class="todo">Ricetta di deploy git-backed (post-receive, poi lint gate)</li>
       <li class="todo">npm publish + CI</li>
       <li class="todo">Tasks extension e MCP Apps</li>
     </ul>
   </section>
 
   <footer>
-    <p>Manent è software libero, licenza Apache-2.0 — <a href="https://github.com/colopisalvatore/manent">github.com/colopisalvatore/manent</a>. Progettato e scritto da <a href="/">Salvatore Colopi</a>. <em>Verba volant, scripta manent.</em></p>
+    <p>Manent è software libero, licenza Apache-2.0: <a href="https://github.com/colopisalvatore/manent">github.com/colopisalvatore/manent</a>. Progettato e scritto da <a href="/">Salvatore Colopi</a>. <em>Verba volant, scripta manent.</em></p>
   </footer>
 </div>
 </body>
