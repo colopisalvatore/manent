@@ -1,0 +1,17 @@
+
+480 notes, 472 queries — sorted by curated MRR
+
+  curated              auto
+  hit@1   MRR      hit@1   MRR     configuration
+   70.0% 0.838    97.3% 0.986   bm25 (lexical only)
+   70.0% 0.838    97.3% 0.986   graph .2 hub .4 imp 0 rec off
+   70.0% 0.838    97.3% 0.986   graph .1 hub .4 imp 0 rec off
+   70.0% 0.838    97.3% 0.986   graph 0 hub .4 imp 0 rec off
+   70.0% 0.838    97.3% 0.986   graph 0 hub 1 (no penalty) imp 0 rec off
+   70.0% 0.838    97.3% 0.986   graph .2 hub .15 imp 0 rec off
+   70.0% 0.838    94.8% 0.971   graph .3 hub .4 imp 0 rec 180
+   70.0% 0.838    92.3% 0.961   graph 0 hub .4 imp .15 rec 365
+   70.0% 0.838    92.1% 0.960   graph .2 hub .4 imp .15 rec 365
+   70.0% 0.838    92.1% 0.960   graph .5 hub .4 imp .15 rec 365
+
+Pick the top row that does not lose auto MRR versus the lexical baseline.

@@ -1,0 +1,13 @@
+.........
+
+  passages  curated          oblique          auto     overall
+            hit@1   MRR      MRR    rec@5     hit@1    MRR     configuration (all fused lex1:dense2)
+    1150     95.0% 0.975   0.182  25.0%    96.6%  0.967   chunks 1400 first 3 / mean2
+     479     95.0% 0.975   0.115  12.5%    96.2%  0.965   single full body / max
+     479     95.0% 0.967   0.210  37.5%    97.5%  0.972   single 900 / max
+    1150     90.0% 0.950   0.181  25.0%    96.2%  0.963   chunks 1400 first 3 / max-norm
+    3742     90.0% 0.942   0.252  31.3%    92.8%  0.944   chunks 1000 all / max-norm
+     479     90.0% 0.942   0.181  12.5%    96.6%  0.967   single 1400 (default) / max
+    3742     90.0% 0.942   0.038  12.5%    96.6%  0.965   chunks 1000 all / max
+    1150     85.0% 0.917   0.141  12.5%    96.6%  0.965   chunks 1400 first 3 / max
+    3742     80.0% 0.883   0.049  12.5%    96.8%  0.963   chunks 1000 all / mean2

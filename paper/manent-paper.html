@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manent: File-First, Git-Versioned Memory for AI Agents</title>
+<style>
+  @page { size: A4; margin: 22mm 20mm 22mm 20mm; }
+  :root { --ink: #111; --muted: #555; --rule: #bbb; --accent: #0b6e5a; }
+  html { font-size: 10.6pt; }
+  body { margin: 0 auto; max-width: 172mm; padding: 10mm 6mm; color: var(--ink); font-family: Georgia, "Times New Roman", "Liberation Serif", serif; line-height: 1.42; text-rendering: optimizeLegibility; }
+  h1 { font-family: "Segoe UI", Helvetica, Arial, sans-serif; font-size: 19pt; line-height: 1.2; margin: 0 0 6pt; letter-spacing: -.01em; }
+  .authors { font-size: 10.5pt; margin: 0 0 2pt; }
+  .affil { color: var(--muted); font-size: 9.5pt; margin: 0 0 14pt; }
+  h2 { font-family: "Segoe UI", Helvetica, Arial, sans-serif; font-size: 12.5pt; margin: 18pt 0 6pt; page-break-after: avoid; }
+  h3 { font-family: "Segoe UI", Helvetica, Arial, sans-serif; font-size: 10.8pt; margin: 12pt 0 4pt; page-break-after: avoid; }
+  p { margin: 0 0 7pt; text-align: justify; hyphens: auto; }
+  .abstract { border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); padding: 8pt 0; margin: 0 0 12pt; font-size: 9.8pt; }
+  .abstract p { margin: 0 0 5pt; }
+  .abstract .kw { color: var(--muted); }
+  code { font-family: Consolas, "Cascadia Mono", Menlo, monospace; font-size: 9pt; }
+  pre { font-family: Consolas, "Cascadia Mono", Menlo, monospace; font-size: 8.6pt; line-height: 1.35; background: #f4f4f2; border: 1px solid #e0e0dc; padding: 6pt 8pt; margin: 4pt 0 8pt; white-space: pre-wrap; page-break-inside: avoid; }
+  table { border-collapse: collapse; width: 100%; font-size: 9pt; margin: 4pt 0 4pt; page-break-inside: avoid; }
+  th, td { padding: 3pt 5pt; border-bottom: 1px solid #ddd; text-align: left; vertical-align: top; }
+  th { border-bottom: 1px solid #555; font-family: "Segoe UI", Helvetica, Arial, sans-serif; font-size: 8.4pt; }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  tr.best td { font-weight: 700; }
+  .caption { font-size: 8.8pt; color: var(--muted); margin: 0 0 10pt; text-align: left; }
+  .caption b { color: var(--ink); }
+  figure { margin: 8pt 0 10pt; page-break-inside: avoid; }
+  figure svg { width: 100%; height: auto; display: block; }
+  ul, ol { margin: 0 0 7pt 1.2em; padding: 0; }
+  li { margin: 0 0 2.5pt; }
+  .refs { font-size: 8.9pt; }
+  .refs li { margin: 0 0 3pt; text-align: left; }
+  .foot { font-size: 8.8pt; color: var(--muted); }
+  sup { font-size: 7pt; }
+  .keyfinding { border-left: 3px solid var(--accent); padding: 3pt 8pt; margin: 6pt 0 8pt; background: #f6faf8; page-break-inside: avoid; }
+  @media screen { body { background: #fff; } }
+</style>
+</head>
+<body>
+
+<h1>Manent: File-First, Git-Versioned Memory for AI Agents — Specification, Evaluation Harness, and What Retrieval Ablations on Atomic Notes Show</h1>
+<p class="authors">Salvatore Colopi</p>
+<p class="affil">Independent software engineer, Italy · <a href="https://salvatorecolopi.com/manent/">salvatorecolopi.com/manent</a> · Code: <a href="https://github.com/colopisalvatore/manent">github.com/colopisalvatore/manent</a> (Apache-2.0) · Preprint, 4 September 2026</p>
+
+<div class="abstract">
+<p><b>Abstract.</b> Memory for AI agents is usually either a proprietary vector store that "extracts" memories from conversations — opaque, not diffable, not curatable by hand — or an unstructured pile of notes with no schema and no guarantee of retrieval quality. We present <b>Manent</b>, a third path: memory is a plain Markdown vault (Obsidian-compatible), versioned in git, governed by a closed, versioned frontmatter specification with typed edges, and served to any agent through the Model Context Protocol. Every index, graph and embedding is derived and rebuildable from the files, which are the only source of truth. The contribution is threefold. (1) A specification that adds to the note contract an <i>audience</i> field whose absence means <i>private</i>, and a serving model in which each identity reads the vault through a view built <i>before</i> any index exists, so that tools that bypass the ranker cannot bypass the access filter. (2) An evaluation harness with three kinds of query — hand-written close to the note's wording, hand-written <i>oblique</i> (the concept without the note's words), and automatically derived from note descriptions — with a regression gate, which turned ranking into a measured decision. (3) The measurements themselves, on a real 479-note vault: a tokenization rule was worth 35 points of top-1 accuracy before any semantic method; graph expansion by Personalized PageRank added nothing; fusing lexical and local dense retrieval by reciprocal rank reached the best top-1 accuracy, with the lexical/dense balance proving corpus-sensitive enough to deserve periodic re-measurement; and splitting notes into passages under plain max-pooling made retrieval <i>worse</i>, because it reintroduces the length bias BM25 normalizes away — a length-aware aggregation or a bounded number of passages recovers it, and a contextual prefix on every passage proved indispensable. We also describe a <i>gap register</i> that lets a shared brain learn from the questions it could not answer without storing anyone's text, and which manufactures oblique golden-set queries from real use. Limitations are substantial and stated: one corpus, a small author-written golden set, no user study.</p>
+<p class="kw"><b>Keywords:</b> agent memory · retrieval-augmented generation · hybrid retrieval · reciprocal rank fusion · chunking · evaluation · Model Context Protocol · access control</p>
+</div>
+
+<h2>1. Introduction</h2>
+<p>Large-language-model agents forget everything at the end of a context window. The systems built to fix this fall into two families. The first extracts "memories" from conversations and stores them as embeddings and rows in a database the operator does not read, diff, correct by hand, or carry elsewhere [1, 3, 4]. The second keeps human-readable notes but offers no contract: no schema, no lint, no measured retrieval, no way to know whether a new note broke anything. Both families leave the same question unanswered once more than one agent depends on the memory: <i>who wrote this, who may read it, and how do we know retrieval is not getting worse?</i></p>
+<p>Manent takes a third path, built on four commitments. <b>Markdown files are the only source of truth</b>; search indexes, graphs and embeddings are derived artifacts, rebuildable from the files at any time, and a tool that makes derived state authoritative is non-conforming. <b>Git is the synchronization and audit backbone</b>: every memory write is a commit with an author, a time and a message. <b>A closed, versioned schema</b> (JSON Schema 2020-12) governs note types, frontmatter fields and typed edges, and is linted in CI so that a malformed note never lands. <b>MCP is the access layer</b> [12]: any client that speaks the Model Context Protocol mounts the brain with a URL and no custom SDK.</p>
+<p>The design is not the point of this paper; the measurements are. Three of the four retrieval improvements we expected to ship — graph expansion, passage chunking, and a "hybrid" ranker with recency and centrality multipliers — measured neutral or negative on a real vault, and the one that measured best (a tokenization rule) is the least glamorous. Without an evaluation harness we would have shipped the wrong three and credited the wrong one. Section 6 reports those ablations in full, including the numbers that did not go our way.</p>
+<p><b>Contributions.</b> (i) A vault specification for agent memory with typed notes, typed edges, wikilink resolution rules that make a vault read the same in an editor and in an index, an <i>audience</i> field whose absence means private, and a status field that ranking consumes (§3). (ii) A serving model in which identity resolves to a view of the vault built before indexing, writes by agents are gated, quarantined and confirmed by the person through the protocol's own multi round-trip primitive, and every call is auditable (§4). (iii) An evaluation harness whose three query kinds measure different things, with a regression gate that has already caught one drift (§5). (iv) Retrieval ablations on a real 479-note vault, with one negative and one cautionary result that generalize to any memory made of atomic, front-loaded notes (§6). (v) A gap register that learns from unanswered questions without storing users' text and turns closed gaps into the golden-set queries hardest to write by hand (§7).</p>
+
+<h2>2. Related work</h2>
+<p><b>Agent memory systems.</b> MemGPT [1] treats the context window as main memory and pages information in and out of external storage under the model's control. Generative Agents [2] introduced a memory stream scored by recency, importance and relevance; Manent's early "hybrid" ranker borrowed those multipliers and measured them away (§6.3). Mem0 [3] and Zep [4] extract and consolidate memories from conversations into a store — a graph in Zep's case — optimized for the recall needed by a conversational agent. These systems own the representation; Manent deliberately does not: its representation is files a person edits in an ordinary editor, and the system's job is to index, serve and measure them.</p>
+<p><b>Retrieval.</b> BM25 [5] remains the lexical baseline and, as §6.1 shows, the tokenizer feeding it matters more than the model above it. Dense retrieval with small multilingual encoders [6] is now cheap enough to run on a CPU; we use it locally, without an API, because the vault's text must not leave the machine. Reciprocal rank fusion [7] combines ranked lists by position rather than score, which is what allows an inverted index and a cosine similarity to be merged without inventing a scale between them. Contextual retrieval [8] prepends a document-level summary to each chunk before embedding; our chunking sweep (§6.4) reproduces the size of that effect and adds a finding on when chunking itself should be avoided. Retrieval-augmented generation [9] frames the whole pipeline; Personalized PageRank [10] is the graph expansion we measured.</p>
+<p><b>Knowledge management.</b> The vault layout follows the Zettelkasten practice of atomic notes [11] and the conventions of Obsidian, whose wikilink resolution by file name and path our specification reconciles with resolution by canonical name (§3.4).</p>
+<p><b>Protocol and access control.</b> The Model Context Protocol revision 2026-07-28 [12] removed sessions and the initialization handshake and introduced multi round-trip requests, which we use for write approval (§4.3). The practice of enforcing document-level permissions <i>inside</i> retrieval rather than after ranking is well established in enterprise retrieval systems; Manent applies it at the earliest possible point, the loading of the vault for a given reader (§4.1).</p>
+
+<h2>3. The Manent specification (v0.2)</h2>
+<h3>3.1 Core invariant and note contract</h3>
+<p>One note is one file is one atomic fact, entity or lesson. YAML frontmatter is validated against a base JSON Schema (draft 2020-12) that requires three fields: <code>name</code> (a slug equal to the file name, the wikilink target), <code>description</code> (one line, at most 300 characters — the surface a ranker judges relevance on without opening the note), and <code>type</code>, from a closed enumeration of eleven types (<code>feedback</code>, <code>reference</code>, <code>project</code>, <code>wiki-entity</code>, <code>wiki-concept</code>, <code>raw-source</code>, <code>persona</code>, <code>handoff</code>, <code>retro</code>, <code>moc</code>, <code>index</code>). Optional fields carry dates, tags, provenance, confidence, status, audience and author; unknown fields are allowed for forward compatibility. Notes are hand-written, so invalid YAML happens; a conforming tool loads such a note with empty frontmatter and an intact body and reports it, instead of failing the run.</p>
+<h3>3.2 Typed edges</h3>
+<p>Four edge kinds form a graph over notes: <code>wikilink</code> (from <code>[[name]]</code> in the body; an unresolved target is not an error but a note worth writing), and three frontmatter edges — <code>provenance</code> (synthesis → raw source), <code>supersedes</code> (this note replaces that one), <code>contradicts</code> (a flagged conflict, surfaced for a person and never auto-resolved).</p>
+<h3>3.3 Audience and status</h3>
+<p>Visibility is a property of the note, declared in its frontmatter as <code>audience</code>, a list of slug labels — not of the folder, because the same note often serves two audiences and a folder forces it into one home. Two labels are reserved. <code>private</code> is what a note means when the field is absent or empty: only the owner reads it. This default is the most restrictive reading on purpose, so that a note written without thinking about it cannot become visible by accident. <code>public</code> is the one label that may leave the organization. Every other label belongs to the vault, which closes its own set at the lint gate (<code>--audiences tech,business,product</code>): an unknown label is reported and, until fixed, makes a note <i>less</i> visible, never more, because no reader's scope names it. <code>status</code> gains the value <code>quarantine</code> for notes written by an agent with no human in the loop; ranking must place <code>quarantine</code>, <code>deprecated</code> and <code>archived</code> notes below an active note of equal relevance (§6.5).</p>
+<h3>3.4 Wikilink resolution</h3>
+<p>A vault is written by a person in an editor and read by a machine through an index, and the two do not identify a note the same way: Obsidian resolves <code>[[foo]]</code> by file name and <code>[[dir/foo]]</code> by path, while a note's identity in the index is its canonical <code>name</code>. Where those disagree — a note named <code>moc-ops</code> living in <code>moc/ops.md</code> — a link that works in the editor looks broken to the index. The specification therefore requires a resolver to try, in order: canonical name; path relative to the linking note; path from the vault root; file name alone, when unique or disambiguated by the linking note's own directory. Ambiguity that proximity cannot settle stays unresolved: guessing would wire the graph to the wrong note silently. On the reference vault this rule raised resolved wikilink edges from a state where path-form links were all reported broken to 1,335 of 1,490 resolved, and every remaining unresolved link names a note that does not exist.</p>
+<h3>3.5 Lint</h3>
+<p>Twelve rules with three severities: schema, missing or invalid frontmatter and duplicate names are errors; name–filename mismatch, unresolved links, missing body sections for <code>feedback</code> notes, misplaced raw sources, personal data, model-directed text and unknown audience labels are warnings that <code>--strict-content</code> turns into errors for CI; orphans are informational. Run in strict mode on the brain repository, lint is the gate: a note that fails it never lands in the shared branch, which is the only place the server reads from.</p>
+
+<h2>4. Serving a vault to several agents</h2>
+<p>The server exposes nine tools over MCP: <code>brain_search</code> (ranked, returning a <code>searchId</code>, §7), <code>brain_read</code> and <code>brain_read_raw</code>, <code>brain_neighbors</code>, <code>brain_list</code>, <code>brain_grep</code>, <code>brain_feedback</code>, and — advertised only when the operator opts in — <code>brain_write</code> and <code>brain_append</code>. Two protocol eras are served as separate implementations rather than one blended path: the initialization-handshake revisions through the official SDK, and revision 2026-07-28 natively (no handshake, per-request protocol fields, cacheable list results, multi round-trip requests). Tool definitions live in one module and every call passes through one dispatcher, so the eras cannot drift in capability. Era detection keys on the RPC itself and never on a transport header alone — a lesson from a dual-era client that sent the newer header with the older handshake and was wrongly rejected.</p>
+<h3>4.1 Identity resolves to a view, before indexing</h3>
+<p>A vault read by one person needs no identities: the token is the password. A vault read by a customer-care agent, a coding agent and the owner's own sessions needs to know who is asking. Agents are declared in a JSON file (<code>name → {token, read: [labels], write: dir}</code>); the owner's token, an agent's token, and OAuth 2.1 access tokens minted for either all resolve to an <i>identity</i> that travels with the call. The identity's <i>view</i> of the vault is built from the notes its scope may read — notes, graph and ranker alike — <b>before any index exists over it</b>. Search, listing, regex grep, raw reads and neighbourhoods are all computed on the view; edges into hidden notes are dropped, so a neighbourhood cannot even name what its reader may not open. This is the property that matters: filtering after ranking would leave every tool that bypasses the ranker — grep, raw read — wide open. Views are cached per scope and invalidated whenever the served state changes; a dense index is sliced by visible note rather than re-embedded.</p>
+<h3>4.2 Writes: the gate and quarantine</h3>
+<p>Every write is scanned before anything touches the disk. Text that carries personal data (email addresses, phone numbers, IBANs, card numbers with a valid Luhn checksum, national identifiers) or that reads as an instruction aimed at a model (override phrases in two languages, hidden HTML directives, role hijacks, zero-width and bidirectional control characters, active content) is refused with the reason. The rationale is twofold: a vault lives in git and git history is forever, so the check belongs before storage, not in a cleanup afterwards; and a knowledge base that agents with tools read must not be a place where an outsider's words can become instructions. A write by any identity other than the owner lands in the directory that identity was granted and nowhere else, stamped <code>status: quarantine</code>, <code>author: &lt;agent&gt;</code> and <code>audience: [private]</code> whatever the call asked for. A quarantined note is ranked below active ones and visible to the owner only, who promotes it by editing status and audience: a commit with a name on it.</p>
+<h3>4.3 Approval through the protocol</h3>
+<p>On revision 2026-07-28 a write does not complete on the first call. It answers <code>resultType: "input_required"</code> with an elicitation form showing the proposed note, and completes on the retry that carries the person's confirmation in <code>inputResponses</code>. The <code>requestState</code> echoed by the client is a fingerprint of what was proposed, so an altered retry is asked again rather than trusted, and the server keeps no state. The agent proposes, the person confirms, in the standard's own primitive. Clients that cannot ask — the handshake eras, or clients that do not declare the elicitation capability — fall through: the owner's write goes straight through, an agent's goes to quarantine.</p>
+<h3>4.4 Audit and hot reload</h3>
+<p>One JSON line per tool call records the identity, the tool, redacted arguments, result names and latency: enough to reconstruct an incident, not enough to reconstruct a customer. The server watches the vault and re-indexes what changed, coalescing bursts (a <code>git checkout</code> that touches hundreds of files costs one reload) and re-embedding only notes whose content hash moved; measured on the test vault, a new file is searchable about 530 ms after the write. A brain that lives in git therefore needs only a post-receive hook that checks out the shared branch.</p>
+
+<h2>5. The evaluation harness</h2>
+<p>Ranking changes are decided by the harness, not by intuition. A retriever is scored against a set of queries, each with the canonical names of the notes a good ranking must surface, and reported as hit@1, hit@3, recall@5, recall@10, MRR and nDCG@10, overall and per query kind. Three kinds answer three different questions:</p>
+<ul>
+<li><b>curated</b> — hand-written, wording close to the note's own: <i>lexical recall</i>. Twenty queries on the reference vault (mean 7.0 words; four name more than one acceptable note).</li>
+<li><b>oblique</b> — hand-written, asking for the concept <i>without</i> the note's words: <i>semantic recall</i>, the hard case. Eight queries (mean 8.9 words). Example: "who pays the two euros on the receipt" targets a note about stamp duty that never says <i>two euros</i>.</li>
+<li><b>auto</b> — derived from each note's <code>description</code> stripped of stopwords and markup, whose only right answer is that note: a broad regression signal with no labelling cost. 444 queries (mean 8.4 words) on the reference vault; synthetic, so it measures "can retrieval find a note from its own summary", not user phrasing, and is read alongside the curated set, never instead of it.</li>
+</ul>
+<p>A saved report acts as a baseline; a later run exits non-zero if any overall metric drops beyond a tolerance of 0.5 points. The server and the harness share one retrieval implementation, so what is measured is what ships — including, since v0.2, status demotion.</p>
+
+<h2>6. Retrieval ablations on a real vault</h2>
+<h3>6.1 Setup</h3>
+<p><b>Corpus.</b> The author's working vault: 479 notes at the time of measurement (4 September 2026), written in Italian over fourteen months, of the types listed in Table 1. Notes are atomic and front-loaded — one fact each, stated at the top — with a median body of 3,188 characters (quartiles 1,698 and 6,172; 90th percentile 10,375; a few long transcripts up to 210k). 404 notes carry wikilinks, 1,490 link edges in all. The vault is private and not distributed; the golden set that names its notes is in the repository, and every script takes a vault path so the same measurements run on any conforming vault.</p>
+<table>
+<thead><tr><th>type</th><th class="n">notes</th><th>type</th><th class="n">notes</th></tr></thead>
+<tbody>
+<tr><td>feedback</td><td class="n">145</td><td>handoff</td><td class="n">28</td></tr>
+<tr><td>project</td><td class="n">115</td><td>persona</td><td class="n">20</td></tr>
+<tr><td>reference</td><td class="n">99</td><td>raw-source</td><td class="n">13</td></tr>
+<tr><td>retro</td><td class="n">47</td><td>moc / index</td><td class="n">10 / 3</td></tr>
+</tbody>
+</table>
+<p class="caption"><b>Table 1.</b> Reference vault by note type (480 notes when counted; 479 in the measurements below, before one note was added).</p>
+<p><b>Rankers.</b> Lexical: BM25 as implemented by MiniSearch over four fields (name, name split into words, description, body) with field boosts 3/3/2/1. Dense: <code>Xenova/multilingual-e5-small</code> [6], 384 dimensions, 8-bit quantized (~120 MB), run locally on CPU through <code>@huggingface/transformers</code>, with the E5 "query:" / "passage:" prefixes; each note embedded as one passage made of its title, its description and the first 1,400 characters of its body, vectors cached by content hash. Fused: reciprocal rank fusion [7] of the top-30 of each list with <i>k</i> = 60. Hybrid: BM25 candidates re-ranked by Personalized PageRank [10] over wikilinks plus recency and centrality multipliers, kept for the ablation. Hardware: a consumer laptop; embedding 479 passages takes about two seconds once the model is loaded.</p>
+
+<h3>6.2 Tokenization was the first big win</h3>
+<p>The first lexical configuration indexed every term, with prefix and fuzzy matching enabled on all of them. Its curated hit@1 was 35.0%. Dropping Italian and English function words and allowing prefix matching only on terms of at least five characters (fuzzy on six) moved it to 70.0% — 35 points from a tokenizer rule, before any semantic method (Table 2). The mechanism is visible in the misses: with prefix matching on, <i>di</i> matches <i>diritto</i>, <i>disposizione</i>, <i>documento</i>, and a long legal note accumulates enough noise to outscore the short note that actually answers. The auto set barely moves (96.8% → 97.3%): a query made of a note's own description words matches it under any tokenizer, which is exactly why that set cannot replace hand-written queries.</p>
+<table>
+<thead><tr><th>lexical configuration</th><th class="n">curated hit@1</th><th class="n">curated MRR</th><th class="n">curated recall@5</th><th class="n">oblique MRR</th><th class="n">auto hit@1</th></tr></thead>
+<tbody>
+<tr><td>every term indexed; prefix and fuzzy always on</td><td class="n">35.0%</td><td class="n">0.557</td><td class="n">77.5%</td><td class="n">0.000</td><td class="n">96.8%</td></tr>
+<tr class="best"><td>stopwords removed; prefix ≥ 5 chars, fuzzy ≥ 6 chars</td><td class="n">70.0%</td><td class="n">0.838</td><td class="n">97.5%</td><td class="n">0.063</td><td class="n">97.3%</td></tr>
+</tbody>
+</table>
+<p class="caption"><b>Table 2.</b> The tokenization ablation (<code>scripts/bm25-naive-baseline.mjs</code>). Same index, same queries, same vault.</p>
+
+<h3>6.3 Graph expansion did not pay</h3>
+<p>Notes with wikilinks form a graph, and expanding lexical results along it looked like an obvious gain. We ran a grid over the graph weight, the hub penalty, the importance boost and the recency half-life (Table 3). No configuration beats the lexical baseline on the curated set, and the multipliers cost points on the auto set. The reading that survived the numbers: Personalized PageRank amplifies a good seed; it cannot create one. When the lexical match starts wrong, the walk inherits the error. The hybrid ranker stays available, opt-in, for vaults with a much denser link structure than this one.</p>
+<table>
+<thead><tr><th>configuration</th><th class="n">curated hit@1</th><th class="n">curated MRR</th><th class="n">auto hit@1</th><th class="n">auto MRR</th></tr></thead>
+<tbody>
+<tr class="best"><td>BM25 only (lexical baseline)</td><td class="n">70.0%</td><td class="n">0.838</td><td class="n">97.3%</td><td class="n">0.986</td></tr>
+<tr><td>graph .2 · hub .4 · imp 0 · rec off</td><td class="n">70.0%</td><td class="n">0.838</td><td class="n">97.3%</td><td class="n">0.986</td></tr>
+<tr><td>graph .1 · hub .4 · imp 0 · rec off</td><td class="n">70.0%</td><td class="n">0.838</td><td class="n">97.3%</td><td class="n">0.986</td></tr>
+<tr><td>graph 0 · hub .4 · imp 0 · rec off</td><td class="n">70.0%</td><td class="n">0.838</td><td class="n">97.3%</td><td class="n">0.986</td></tr>
+<tr><td>graph 0 · hub 1 (no penalty) · imp 0 · rec off</td><td class="n">70.0%</td><td class="n">0.838</td><td class="n">97.3%</td><td class="n">0.986</td></tr>
+<tr><td>graph .2 · hub .15 · imp 0 · rec off</td><td class="n">70.0%</td><td class="n">0.838</td><td class="n">97.3%</td><td class="n">0.986</td></tr>
+<tr><td>graph .3 · hub .4 · imp 0 · rec 180</td><td class="n">70.0%</td><td class="n">0.838</td><td class="n">94.8%</td><td class="n">0.971</td></tr>
+<tr><td>graph 0 · hub .4 · imp .15 · rec 365</td><td class="n">70.0%</td><td class="n">0.838</td><td class="n">92.3%</td><td class="n">0.961</td></tr>
+<tr><td>graph .2 · hub .4 · imp .15 · rec 365</td><td class="n">70.0%</td><td class="n">0.838</td><td class="n">92.1%</td><td class="n">0.960</td></tr>
+<tr><td>graph .5 · hub .4 · imp .15 · rec 365 (the original "hybrid" default)</td><td class="n">70.0%</td><td class="n">0.838</td><td class="n">92.1%</td><td class="n">0.960</td></tr>
+</tbody>
+</table>
+<p class="caption"><b>Table 3.</b> Graph-expansion grid (<code>scripts/tune-retrieval.mjs</code>), sorted by curated MRR. "graph" is the weight of the PageRank mass in the final score, "hub" the penalty on high-degree notes, "imp" the importance boost, "rec" the recency half-life in days.</p>
+
+<h3>6.4 Lexical and dense fail in opposite directions</h3>
+<p>The dense ranker alone finds notes BM25 cannot: curated hit@1 rises to 80.0% and oblique recall@5 from 12.5% to 31.3%. It also blurs exact identifiers — slugs, error codes, entity names — that BM25 nails. Fusing the two lists by rank keeps both strengths without inventing a scale between an inverted index and a cosine similarity. The balance was chosen by sweep on the August snapshot, where equal weights let the lexical list pull correct answers off the top spot (80% curated hit@1) and weighting the dense list twice reached 100%; that is the shipped default. Re-run on the September vault (Table 4), the two weightings tie on the curated set (90.0%, MRR 0.942), and equal weights are slightly better on the auto set (97.3% vs 96.6%) and on oblique recall@5 (25.0% vs 12.5% — two queries of eight). Heavier dense weights lose curated accuracy. The lesson is not which weight is right but that the balance is corpus-sensitive and drifts as the vault grows, which makes re-sweeping it a periodic one-command chore rather than a design decision. The oblique set is too small to rank configurations by, and we do not.</p>
+<table>
+<thead><tr><th>ranker</th><th class="n">curated hit@1</th><th class="n">curated MRR</th><th class="n">oblique MRR</th><th class="n">oblique recall@5</th><th class="n">auto hit@1</th></tr></thead>
+<tbody>
+<tr><td>BM25 only</td><td class="n">70.0%</td><td class="n">0.838</td><td class="n">0.063</td><td class="n">12.5%</td><td class="n">97.3%</td></tr>
+<tr><td>dense only (max-norm)</td><td class="n">80.0%</td><td class="n">0.887</td><td class="n">0.192</td><td class="n">31.3%</td><td class="n">95.0%</td></tr>
+<tr class="best"><td>fused lex 1 / dense 1</td><td class="n">90.0%</td><td class="n">0.942</td><td class="n">0.177</td><td class="n">25.0%</td><td class="n">97.3%</td></tr>
+<tr class="best"><td>fused lex 1 / dense 2 (shipped default)</td><td class="n">90.0%</td><td class="n">0.942</td><td class="n">0.181</td><td class="n">12.5%</td><td class="n">96.6%</td></tr>
+<tr><td>fused lex 1 / dense 2, depth 60</td><td class="n">90.0%</td><td class="n">0.942</td><td class="n">0.167</td><td class="n">12.5%</td><td class="n">96.6%</td></tr>
+<tr><td>fused lex 1 / dense 3</td><td class="n">85.0%</td><td class="n">0.917</td><td class="n">0.181</td><td class="n">12.5%</td><td class="n">96.4%</td></tr>
+<tr><td>fused lex 0.5 / dense 3</td><td class="n">80.0%</td><td class="n">0.900</td><td class="n">0.186</td><td class="n">25.0%</td><td class="n">96.2%</td></tr>
+</tbody>
+</table>
+<p class="caption"><b>Table 4.</b> Lexical/dense balance (<code>scripts/tune-fusion.mjs</code>). "lex a / dense b" are the RRF list weights; depth is the number of candidates taken from each list (30 unless stated).</p>
+<figure>
+<svg viewBox="0 0 640 210" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Curated hit@1 by ranker">
+  <g font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11" fill="#111">
+    <line x1="150" y1="20" x2="150" y2="180" stroke="#999"/>
+    <line x1="150" y1="180" x2="620" y2="180" stroke="#999"/>
+    <g fill="#c9c9c4"><rect x="150" y="30" width="161" height="22"/></g><text x="10" y="45">BM25, naive tokenizer</text><text x="318" y="45" font-weight="700">35.0%</text>
+    <g fill="#9a9a94"><rect x="150" y="62" width="322" height="22"/></g><text x="10" y="77">BM25, stopwords + gate</text><text x="479" y="77" font-weight="700">70.0%</text>
+    <g fill="#5b8f83"><rect x="150" y="94" width="368" height="22"/></g><text x="10" y="109">Dense (e5-small, local)</text><text x="525" y="109" font-weight="700">80.0%</text>
+    <g fill="#0b6e5a"><rect x="150" y="126" width="414" height="22"/></g><text x="10" y="141">Fused lex 1 : dense 2</text><text x="571" y="141" font-weight="700">90.0%</text>
+    <g fill="#e0e0dc"><rect x="150" y="158" width="460" height="14"/></g><text x="10" y="169" fill="#555">Fused, August snapshot (305 notes)</text><text x="614" y="169" fill="#555">100%</text>
+    <text x="150" y="196" fill="#555" font-size="10">0%</text><text x="380" y="196" fill="#555" font-size="10">50%</text><text x="600" y="196" fill="#555" font-size="10">100%</text>
+  </g>
+</svg>
+</figure>
+<p class="caption"><b>Figure 1.</b> Curated hit@1 by ranker on the 479-note vault, with the August measurement of the same fused configuration on the 305-note snapshot for comparison.</p>
+<div class="keyfinding"><p><b>Growth costs precision.</b> The same fused configuration measured 100% curated hit@1 and 1.000 MRR on the vault's 305-note snapshot of 9 August 2026, and 90.0% / 0.942 on the 479-note vault of 4 September. Two of twenty hand-written queries now rank their note second or third behind a newer note on the same subject. This is not a failure of the method but a property of any growing memory, and it is the reason the regression gate exists: the drift was detected by re-running the harness, not noticed by a user.</p></div>
+
+<h3>6.5 Chunking made it worse, and that is informative</h3>
+<p>Splitting notes into passages before embedding is the standard next step in retrieval-augmented generation, and the obvious one here: a whole note averaged into one vector loses the paragraph that answers, and anything past the truncation point is invisible. We implemented contextual chunking [8] — each passage prefixed with the note's title and description — with three aggregations from passage scores to a note score, and swept passage size (Table 5).</p>
+<table>
+<thead><tr><th>passages</th><th>configuration</th><th>aggregation</th><th class="n">curated hit@1</th><th class="n">curated MRR</th><th class="n">oblique MRR</th><th class="n">auto hit@1</th></tr></thead>
+<tbody>
+<tr class="best"><td class="n">479</td><td>single, header + first 900 chars</td><td>max</td><td class="n">95.0%</td><td class="n">0.967</td><td class="n">0.210</td><td class="n">97.5%</td></tr>
+<tr><td class="n">1,150</td><td>chunks of 1,400, first 3 per note</td><td>mean2</td><td class="n">95.0%</td><td class="n">0.975</td><td class="n">0.182</td><td class="n">96.6%</td></tr>
+<tr><td class="n">479</td><td>single, header + full body</td><td>max</td><td class="n">95.0%</td><td class="n">0.975</td><td class="n">0.115</td><td class="n">96.2%</td></tr>
+<tr><td class="n">1,150</td><td>chunks of 1,400, first 3 per note</td><td>max-norm</td><td class="n">90.0%</td><td class="n">0.950</td><td class="n">0.181</td><td class="n">96.2%</td></tr>
+<tr><td class="n">3,742</td><td>chunks of 1,000, every passage</td><td>max-norm</td><td class="n">90.0%</td><td class="n">0.942</td><td class="n">0.252</td><td class="n">92.8%</td></tr>
+<tr><td class="n">479</td><td>single, header + first 1,400 chars (shipped default)</td><td>max</td><td class="n">90.0%</td><td class="n">0.942</td><td class="n">0.181</td><td class="n">96.6%</td></tr>
+<tr><td class="n">3,742</td><td>chunks of 1,000, every passage</td><td>max</td><td class="n">90.0%</td><td class="n">0.942</td><td class="n">0.038</td><td class="n">96.6%</td></tr>
+<tr><td class="n">1,150</td><td>chunks of 1,400, first 3 per note</td><td>max</td><td class="n">85.0%</td><td class="n">0.917</td><td class="n">0.141</td><td class="n">96.6%</td></tr>
+<tr><td class="n">3,742</td><td>chunks of 1,000, every passage</td><td>mean2</td><td class="n">80.0%</td><td class="n">0.883</td><td class="n">0.049</td><td class="n">96.8%</td></tr>
+</tbody>
+</table>
+<p class="caption"><b>Table 5.</b> Chunking sweep (<code>scripts/tune-chunking.mjs</code>) with the fused ranker. "single" embeds one passage per note (title + description + the first <i>n</i> characters of the body); "chunks" embeds every passage. Aggregations: <i>max</i> (best passage), <i>max-norm</i> (best passage damped by the logarithm of the passage count), <i>mean2</i> (mean of the two best).</p>
+<p>The sweep was run twice, on the 305-note snapshot in August and on the 479-note vault in September, and the two readings differ in an instructive way. In August, splitting every note into passages cost 10–15 points of curated hit@1 outright. In September (Table 5) the cost moved: with plain max-pooling, chunking every passage ties the single-passage default on the curated set (90.0%) but collapses the oblique set (MRR 0.181 → 0.038). The mechanism is the same in both cases. With roughly eight times as many passages as notes, max-pooling gives a long note one chance per passage to match by luck, so long retrospectives and legal texts float up — the length bias BM25 normalizes away and dense retrieval over whole documents does not — and where the query shares no vocabulary with the note, luck is all there is. Four findings follow.</p>
+<p>First, <b>plain max over every passage is never the best configuration</b>, on either vault. Second, <b>a length-aware aggregation repairs what max breaks, at a price</b>: damping the best passage by the logarithm of the passage count gives the best oblique MRR of any configuration (0.252) and costs four points on the auto set, the price of 3,742 passages competing for every query. Third, <b>bounded chunking is a middle ground</b>: the first three passages of each note with the mean of the two best scores reaches the highest curated MRR (0.975) at no auto cost. Fourth, <b>passage length matters as much as passage count</b>: a single passage of the header plus the first 900 characters beats the shipped 1,400-character default on every set (95.0% / 0.967 / 0.210 / 97.5%), while the full body ties on the curated set and loses the oblique one — on notes that state their fact at the top, the tail is elaboration that blurs the vector. The differences among the top three configurations are one curated query and two oblique queries, within noise for this golden set; what the sweep establishes firmly is the bottom of the table. The shipped default stays at one 1,400-character passage until the gap register (§7) supplies enough real oblique queries to decide; the passage cap and size are explicit parameters, and vaults of long, multi-topic documents — where the answer can sit in the middle of a note — should expect the balance to tip toward chunking.</p>
+<p>One result from the August sweep that this one did not repeat deserves to stand on its own: <b>the contextual prefix is not optional.</b> A passage stripped of its note's title and description loses its subject, and every configuration collapsed without it (curated hit@1 55–75%, auto 73–79%, against 95–100% and 96% with it). Whatever the chunking, a passage must carry its document's subject.</p>
+
+<h3>6.6 Status demotion</h3>
+<p>Since v0.2 every ranker is wrapped so that notes with <code>status</code> <i>quarantine</i> or <i>deprecated</i> score ×0.5 and <i>archived</i> ×0.25, looking past the requested depth so a demoted note that fell out of the top can be replaced. On a vault with no such notes the wrapper is a no-op, and the regression gate confirms no metric moved. On a fixture with an active note and a deprecated twin of identical wording, the twin ranks second with its status reported on the hit. The multiplier is deliberate rather than a hard filter: a deprecated note still surfaces when nothing better exists, and a person can see why it ranked where it did.</p>
+
+<h2>7. The gap register: learning from questions without storing them</h2>
+<p>A memory that several agents read on behalf of customers and colleagues faces a question the retrieval numbers do not answer: how does it learn from the people asking, without putting their conversations into a vault that lives in git forever? The answer is that it does not need their text. It needs to know <b>which questions it could not answer</b>: one row per question, not a transcript — actionable, small, and free of personal data by construction rather than by discipline.</p>
+<p>The register records every <code>brain_search</code>, redacted, into a SQLite file outside the vault. Two signals carry the weight. <b>followed</b>: a search after which the same identity opens one of its results within ten minutes helped; a search nobody reads did not. The server sees this alone; since the 2026-07-28 revision there is no session in which "the same caller later read a result" could be expressed, so the server keeps its own short memory per agent and treats a read whose name appears in a recent result list as following that search. <b>count</b>: rows group by meaning, through the same local embedding model the ranker uses, so paraphrases collapse into one line; by normalized content words until the model has warmed up. The caller recorded is the agent, never a person.</p>
+<p>The grouping threshold was measured rather than guessed. On Italian restaurant and operations questions, query-prefixed on both sides, five paraphrase pairs scored 0.908–0.943 cosine, four unrelated pairs 0.752–0.835, and "same topic, different question" pairs ("opening hours" vs. "are you open for lunch?") 0.865–0.921. The default threshold, 0.9, sits in the gap between the highest unrelated and the lowest paraphrase score; it is a parameter, and the register should read as one row per question.</p>
+<p>The register is a queue, not a memory: its job is to be emptied. A gap is a golden-set entry missing its answer. When a person writes the note that answers it and closes the gap naming that note, the pair — the question as the asker phrased it, the note the curator wrote — becomes an <i>oblique</i> query by construction, the kind that §5 shows the ranker is weakest on and that until now had to be written by hand imagining how someone else would ask. The regression gate then keeps every closed gap reachable when the ranker changes. What the register cannot see is "there, but wrong": a confident wrong answer arrives with a high score and a read and looks like a success. Only the agent or the person can say so; a <code>brain_feedback</code> tool files that verdict next to the question it came from.</p>
+
+<h2>8. Limitations and threats to validity</h2>
+<ul>
+<li><b>One corpus.</b> Every number is from one private vault in one language, written by one person. The findings on tokenization, graph expansion and chunking are stated as findings about <i>atomic, front-loaded notes</i>; on long, multi-topic documents the chunking result in particular is expected to reverse, and we say so.</li>
+<li><b>A small, author-written golden set.</b> Twenty curated and eight oblique queries were written by the vault's author, who also wrote the notes; a single query is worth five and 12.5 points of hit@1 respectively, and no significance testing is meaningful at that size. The auto set is large but synthetic. The gap register exists partly to replace author-written oblique queries with real ones.</li>
+<li><b>No user study, no end-task metric.</b> We measure whether the right note is retrieved, not whether an agent then answers correctly.</li>
+<li><b>One embedding model, one hardware setting.</b> The dense results are for a small quantized multilingual encoder on CPU, chosen for privacy and cost; larger models may change the lexical/dense balance.</li>
+<li><b>Snapshots.</b> The August and September measurements are on different vault sizes, which is the point of §6.4's drift finding but also means the two tables are not a controlled comparison.</li>
+<li><b>Security claims are architectural, not audited.</b> The visibility-before-indexing property is enforced by construction and covered by tests; the PII and injection scanners are regular expressions, meant to fail closed at the gate and to be noisy but useful in lint, not to be complete.</li>
+</ul>
+
+<h2>9. Conclusion and availability</h2>
+<p>Manent shows that agent memory can be plain files under version control without giving up retrieval quality, access control or auditability — provided the retrieval is measured. The measurements say something general about memories made of atomic notes: fix the tokenizer before adding a model; fuse lexical and dense retrieval by rank and re-sweep the balance as the vault grows; never let every passage of a long note compete under plain max-pooling, and never embed a passage without its document's subject. The serving model says something about shared memories: decide who may read a note before you index it, keep agents' writes apart until a person promotes them, and learn from unanswered questions instead of storing conversations. The code, the specification, the golden set, the sweep scripts and the raw outputs behind every table are at <a href="https://github.com/colopisalvatore/manent">github.com/colopisalvatore/manent</a> under the Apache-2.0 license.</p>
+
+<h2>References</h2>
+<ol class="refs">
+<li>C. Packer, S. Wooders, K. Lin, V. Fang, S. G. Patil, I. Stoica, J. E. Gonzalez. <i>MemGPT: Towards LLMs as Operating Systems.</i> arXiv:2310.08560, 2023.</li>
+<li>J. S. Park, J. C. O'Brien, C. J. Cai, M. R. Morris, P. Liang, M. S. Bernstein. <i>Generative Agents: Interactive Simulacra of Human Behavior.</i> UIST 2023; arXiv:2304.03442.</li>
+<li>P. Chhikara, D. Khant, S. Aryan, T. Singh, D. Yadav. <i>Mem0: Building Production-Ready AI Agents with Scalable Long-Term Memory.</i> arXiv:2504.19413, 2025.</li>
+<li>P. Rasmussen, P. Paliychuk, T. Beauvais, J. Ryan, D. Chalef. <i>Zep: A Temporal Knowledge Graph Architecture for Agent Memory.</i> arXiv:2501.13956, 2025.</li>
+<li>S. Robertson, H. Zaragoza. <i>The Probabilistic Relevance Framework: BM25 and Beyond.</i> Foundations and Trends in Information Retrieval 3(4), 2009.</li>
+<li>L. Wang, N. Yang, X. Huang, L. Yang, R. Majumder, F. Wei. <i>Multilingual E5 Text Embeddings: A Technical Report.</i> arXiv:2402.05672, 2024.</li>
+<li>G. V. Cormack, C. L. A. Clarke, S. Buettcher. <i>Reciprocal Rank Fusion Outperforms Condorcet and Individual Rank Learning Methods.</i> SIGIR 2009.</li>
+<li>Anthropic. <i>Introducing Contextual Retrieval.</i> anthropic.com/news/contextual-retrieval, September 2024.</li>
+<li>P. Lewis et al. <i>Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks.</i> NeurIPS 2020.</li>
+<li>T. H. Haveliwala. <i>Topic-Sensitive PageRank.</i> WWW 2002.</li>
+<li>S. Ahrens. <i>How to Take Smart Notes.</i> 2017.</li>
+<li>Model Context Protocol. <i>Specification, revision 2026-07-28.</i> modelcontextprotocol.io/specification/2026-07-28.</li>
+</ol>
+
+<p class="foot">Reproduction: <code>paper/README.md</code> in the repository lists the exact commands; <code>paper/results/</code> holds the raw outputs the tables were transcribed from. The reference vault is private; the harness runs unchanged on any vault that conforms to the specification.</p>
+
+</body>
+</html>

@@ -1,0 +1,12 @@
+dense index: 480 notes / 480 passages (1 embedded, 479 cached)
+.......
+
+  curated          oblique          auto     overall
+  hit@1   MRR      MRR    rec@5     hit@1    MRR     configuration
+   90.0% 0.942   0.177  25.0%    97.3%  0.971   fused lex 1 / dense 1
+   90.0% 0.942   0.181  12.5%    96.6%  0.967   fused lex 1 / dense 2
+   90.0% 0.942   0.167  12.5%    96.6%  0.967   fused lex 1 / dense 2, depth 60
+   70.0% 0.838   0.063  12.5%    97.3%  0.964   bm25 only
+   85.0% 0.917   0.181  12.5%    96.4%  0.964   fused lex 1 / dense 3
+   80.0% 0.900   0.186  25.0%    96.2%  0.962   fused lex 0.5 / dense 3
+   80.0% 0.887   0.192  31.3%    95.0%  0.953   dense only

@@ -12,7 +12,7 @@ const queries = [...(await E.loadGoldenSet(GOLDEN)).queries, ...E.deriveAutoQuer
 
 const model = await R.loadLocalEmbeddingModel();
 const dense = await R.buildDenseIndex(notes, model, { root: VAULT });
-console.log(`dense index: ${dense.vectors.size} notes (${dense.embedded} embedded, ${dense.reused} cached)`);
+console.log(`dense index: ${dense.notes} notes / ${dense.chunks.length} passages (${dense.embedded} embedded, ${dense.reused} cached)`);
 
 // Pre-embed every query once.
 const texts = queries.map((q) => q.query);

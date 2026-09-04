@@ -1,0 +1,23 @@
+manent eval <vault> --golden eval/golden-aios.json --retriever all   (2026-09-04, 479 notes)
+golden set "aios-brain real queries": 28 hand-written queries
+auto-derived: 443 queries from note descriptions
+dense index: 479 notes / 479 passages (Xenova/multilingual-e5-small, q8, local CPU)
+
+retriever: bm25
+  overall    n= 471  hit@1  94.5%  hit@3  98.3%  recall@5  98.4%  MRR 0.964  nDCG@10 0.969
+  curated    n=  20  hit@1  70.0%  hit@3  95.0%  recall@5  97.5%  MRR 0.838  nDCG@10 0.850
+  oblique    n=   8  hit@1   0.0%  hit@3  12.5%  recall@5  12.5%  MRR 0.063  nDCG@10 0.107
+  auto       n= 443  hit@1  97.3%  hit@3 100.0%  recall@5 100.0%  MRR 0.986  nDCG@10 0.990
+retriever: dense:max-norm
+  overall    n= 471  hit@1  93.0%  hit@3  98.1%  recall@5  98.5%  MRR 0.954  nDCG@10 0.962
+  curated    n=  20  hit@1  80.0%  hit@3 100.0%  recall@5  97.5%  MRR 0.892  nDCG@10 0.906
+  oblique    n=   8  hit@1   0.0%  hit@3  25.0%  recall@5  31.3%  MRR 0.150  nDCG@10 0.187
+  auto       n= 443  hit@1  95.3%  hit@3  99.3%  recall@5  99.8%  MRR 0.971  nDCG@10 0.979
+retriever: fused
+  overall    n= 471  hit@1  94.7%  hit@3  98.5%  recall@5  98.4%  MRR 0.966  nDCG@10 0.971
+  curated    n=  20  hit@1  90.0%  hit@3 100.0%  recall@5  97.5%  MRR 0.942  nDCG@10 0.935
+  oblique    n=   8  hit@1  12.5%  hit@3  12.5%  recall@5  12.5%  MRR 0.178  nDCG@10 0.234
+  auto       n= 443  hit@1  96.4%  hit@3 100.0%  recall@5 100.0%  MRR 0.981  nDCG@10 0.986
+
+(The per-query JSON report is not published: it lists every note's description-derived
+query of a private vault.)

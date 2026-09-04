@@ -1,0 +1,16 @@
+model: Xenova/multilingual-e5-small
+
+paraphrase 0.943  come si fa un ordine dal tavolo  <>  ordinare dal tavolo, come si fa?
+paraphrase 0.913  prenotare un tavolo per due  <>  voglio riservare un posto per cena in due
+paraphrase 0.917  il cron di cpanel non parte  <>  cpanel non esegue il comando schedulato
+paraphrase 0.938  quanto costa la pizza margherita  <>  prezzo della margherita
+paraphrase 0.908  come collego claude.ai al server mcp  <>  connettere un connector mcp a claude
+unrelated  0.752  come si fa un ordine dal tavolo  <>  quanto costa la pizza margherita
+unrelated  0.792  prenotare un tavolo per due  <>  il cron di cpanel non parte
+unrelated  0.835  orari di apertura del locale  <>  menu senza glutine disponibile?
+unrelated  0.816  come pago con carta  <>  come si fa un ordine dal tavolo
+near       0.921  allergeni della carbonara  <>  ingredienti della carbonara
+near       0.865  orari di apertura  <>  siete aperti a pranzo?
+
+paraphrase 0.908–0.943   unrelated 0.752–0.835   near 0.865–0.921
+default threshold 0.9

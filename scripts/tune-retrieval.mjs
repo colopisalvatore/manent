@@ -34,7 +34,7 @@ const CONFIGS = [
 const rows = [];
 for (const cfg of CONFIGS) {
   const retriever = cfg.retriever ? cfg.retriever() : hybridRetriever({ notes, graph }, cfg.opts);
-  const r = runEval(retriever, queries, 10);
+  const r = await runEval(retriever, queries, 10);
   rows.push({
     label: cfg.label,
     curatedHit1: r.bySource.curated.hit1,
