@@ -226,8 +226,9 @@ retriever against three kinds of query, and each kind answers a different questi
 
 ```
 manent eval <vault> --golden eval/golden-aios.json          # bm25 vs hybrid side by side
-manent eval <vault> --golden ... --save baseline.json       # record a baseline
+manent eval <vault> --golden ... --save baseline.json       # record a baseline (metrics only: safe to commit)
 manent eval <vault> --golden ... --baseline baseline.json   # exits 1 if a metric dropped
+manent eval <vault> --golden ... --save full.json --save-full   # with per-query results: names every note, keep it private
 ```
 
 Results on a real 305-note vault (298 queries), in the order they were measured:
@@ -370,7 +371,7 @@ npm run test:gaps      # gap register: redaction, grouping, follow, close, feedb
 npm run test:acl       # identities, visibility at load, quarantine, approval, audit
 npm run test:reload    # hot reload: add, edit, delete, bursts
 npm run test:warmup    # dense ranker warms up in the background
-npm run eval:gate      # retrieval regression gate on the reference vault
+MANENT_VAULT=<vault> npm run eval:gate   # retrieval regression gate; baselines are metrics-only files
 ```
 
 ## Roadmap

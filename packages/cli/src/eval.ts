@@ -30,6 +30,8 @@ export interface EvalCliOptions {
   depth: number;
   worst: number;
   save?: string;
+  /** include the per-query results in the saved report (they name every note) */
+  saveFull?: boolean;
   baseline?: string;
   model?: string;
 }
@@ -122,8 +124,12 @@ export async function runEvalCommand(root: string, opts: EvalCliOptions): Promis
 
   const last = reports[reports.length - 1];
   if (opts.save) {
-    await writeFile(opts.save, JSON.stringify(last, null, 2), "utf8");
-    console.log(`\nreport saved: ${opts.save}`);
+    // Metrics only by default. The per-query results list every auto-derived
+    // query, which is every note's description in the vault: a report meant
+    // to be committed as a baseline must not carry the vault's contents.
+    const toSave = opts.saveFull ? last : { retriever: last.retriever, overall: last.overall, bySource: last.bySource, queries: last.results.length };
+    await writeFile(opts.save, JSON.stringify(toSave, null, 2) + "\n", "utf8");
+    console.log(`\nreport saved: ${opts.save}${opts.saveFull ? " (with per-query results)" : " (metrics only)"}`);
   }
 
   if (opts.baseline) {

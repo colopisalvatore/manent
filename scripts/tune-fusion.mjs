@@ -1,6 +1,7 @@
 // Finds the lexical/dense balance by measurement. Query embeddings are computed
 // once and reused across configurations, so the sweep costs one dense pass.
-const VAULT = process.argv[2] ?? "./vault";
+const VAULT = process.argv[2] ?? process.env.MANENT_VAULT;
+if (!VAULT) throw new Error("pass a vault path as the first argument or set MANENT_VAULT");
 const GOLDEN = process.argv[3] ?? "eval/golden-aios.json";
 
 const core = await import(new URL("../packages/core/dist/index.js", import.meta.url).href);

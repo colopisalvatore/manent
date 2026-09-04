@@ -3,7 +3,8 @@
 // constraint = do not lose ground on the auto-derived regression set.
 //
 // Usage: node scripts/tune-retrieval.mjs [vaultPath] [goldenPath]
-const VAULT = process.argv[2] ?? "./vault";
+const VAULT = process.argv[2] ?? process.env.MANENT_VAULT;
+if (!VAULT) throw new Error("pass a vault path as the first argument or set MANENT_VAULT");
 const GOLDEN = process.argv[3] ?? "eval/golden-aios.json";
 
 const core = await import(new URL("../packages/core/dist/index.js", import.meta.url).href);

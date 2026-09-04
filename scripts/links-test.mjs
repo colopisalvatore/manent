@@ -70,7 +70,7 @@ const graph = buildGraph(notes);
 const targets = graph.edges.filter((e) => e.from === "home").map((e) => e.to).sort();
 ok(
   "archi del grafo normalizzati al nome canonico",
-  JSON.stringify(targets) === JSON.stringify(["rossi", "moc-aios", "moc-ops", "singola-bianchi"]),
+  JSON.stringify(targets) === JSON.stringify(["moc-aios", "moc-ops", "rossi", "singola-bianchi"]),
   targets.join(","),
 );
 

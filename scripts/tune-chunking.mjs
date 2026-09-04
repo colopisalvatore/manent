@@ -1,7 +1,8 @@
 // Does splitting notes into passages actually help? Sweeps chunk size, the
 // contextual prefix and the per-note aggregation, against embedding each note as
 // a single passage. Query embeddings are computed once and reused.
-const VAULT = process.argv[2] ?? "./vault";
+const VAULT = process.argv[2] ?? process.env.MANENT_VAULT;
+if (!VAULT) throw new Error("pass a vault path as the first argument or set MANENT_VAULT");
 const GOLDEN = process.argv[3] ?? "eval/golden-aios.json";
 const CACHE = ".manent/tune-embeddings.json"; // keep the served cache untouched
 

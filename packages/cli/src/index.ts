@@ -52,12 +52,13 @@ program
   .option("--model <id>", "embedding model for dense/fused (default: multilingual-e5-small)")
   .option("--depth <n>", "how many results to score", "10")
   .option("--worst <n>", "list up to N misses", "5")
-  .option("--save <file>", "write the report as JSON")
+  .option("--save <file>", "write the report as JSON (metrics only; safe to commit)")
+  .option("--save-full", "include the per-query results in --save (they list every note's description-derived query)")
   .option("--baseline <file>", "fail if any metric dropped against this saved report")
   .action(
     async (
       dir: string,
-      opts: { golden?: string; auto: boolean; retriever: string; model?: string; depth: string; worst: string; save?: string; baseline?: string },
+      opts: { golden?: string; auto: boolean; retriever: string; model?: string; depth: string; worst: string; save?: string; saveFull?: boolean; baseline?: string },
     ) => {
       if (!RETRIEVERS.includes(opts.retriever as (typeof RETRIEVERS)[number])) {
         console.error(`--retriever must be one of: ${RETRIEVERS.join(", ")}`);
@@ -72,6 +73,7 @@ program
         depth: Number(opts.depth),
         worst: Number(opts.worst),
         save: opts.save,
+        saveFull: !!opts.saveFull,
         baseline: opts.baseline,
       });
       if (code !== 0) process.exitCode = code;
