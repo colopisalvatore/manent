@@ -1,5 +1,14 @@
-import { buildGraph, buildLinkIndex, loadVault, noteName, resolveLink } from "@manent/core";
-import { noteBaseSchema } from "@manent/spec";
+import {
+  buildGraph,
+  buildLinkIndex,
+  loadVault,
+  noteAudiences,
+  noteName,
+  resolveLink,
+  scanInjection,
+  scanPii,
+} from "@manent/core";
+import { noteBaseSchema, RESERVED_AUDIENCES } from "@manent/spec";
 import Ajv2020Module from "ajv/dist/2020.js";
 import addFormatsModule from "ajv-formats";
 
@@ -27,6 +36,13 @@ export interface LintResult {
 export interface LintOptions {
   /** treat unresolved wikilinks as errors instead of warnings */
   strictLinks?: boolean;
+  /**
+   * Treat personal data and model-directed text as errors instead of warnings.
+   * This is the CI gate: a note that fails it never lands in the shared branch.
+   */
+  strictContent?: boolean;
+  /** the vault's audience labels; any other label (reserved ones aside) is reported */
+  audiences?: string[];
 }
 
 export async function lintVault(root: string, opts: LintOptions = {}): Promise<LintResult> {
@@ -53,6 +69,9 @@ export async function lintVault(root: string, opts: LintOptions = {}): Promise<L
     outEdges.add(e.from);
     inEdges.add(e.to);
   }
+
+  const contentSeverity: Severity = opts.strictContent ? "error" : "warning";
+  const knownAudiences = opts.audiences ? new Set<string>([...RESERVED_AUDIENCES, ...opts.audiences.map((a) => a.trim().toLowerCase())]) : undefined;
 
   for (const n of notes) {
     const name = noteName(n);
@@ -140,6 +159,40 @@ export async function lintVault(root: string, opts: LintOptions = {}): Promise<L
         path: n.relPath,
         message: "raw-source notes belong in library/YYYY-MM-DD-<slug>.md",
       });
+    }
+
+    // The content gate. A vault lives in git, and git history is forever: what
+    // this reports is cheaper to fix before the commit than after.
+    const pii = scanPii(`${typeof fm.description === "string" ? fm.description : ""}\n${n.body}`);
+    if (pii.length > 0) {
+      findings.push({
+        rule: "pii",
+        severity: contentSeverity,
+        path: n.relPath,
+        message: `personal data in the note: ${pii.map((f) => `${f.count} ${f.kind}`).join(", ")}`,
+      });
+    }
+    const injection = scanInjection(n.body);
+    if (injection.length > 0) {
+      findings.push({
+        rule: "injection",
+        severity: contentSeverity,
+        path: n.relPath,
+        message: `text that reads as an instruction to a model: ${injection.map((f) => `${f.kind} (line ${f.line}: "${f.sample}")`).join("; ")}`,
+      });
+    }
+
+    if (knownAudiences) {
+      for (const a of noteAudiences(n)) {
+        if (!knownAudiences.has(a)) {
+          findings.push({
+            rule: "audience-unknown",
+            severity: "warning",
+            path: n.relPath,
+            message: `audience "${a}" is not one of ${[...knownAudiences].join(", ")} — until fixed, no reader's scope names it`,
+          });
+        }
+      }
     }
 
     if (

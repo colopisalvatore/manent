@@ -8,6 +8,8 @@ export interface Hit {
   score: number;
   /** how this hit was produced — useful to explain a ranking */
   via?: string;
+  /** set when the note's status demoted it (quarantine, deprecated, archived) */
+  status?: string;
 }
 
 /**

@@ -4,7 +4,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { BrainContext } from "./context.js";
 import { loadBrainContext, type LoadContextOptions } from "./context.js";
-import { toolsFor } from "./tools.js";
+import { callTool, toolsFor } from "./tools.js";
 
 /**
  * Legacy era: the handshake-based revisions (2025-11-25 and earlier), served by
@@ -20,7 +20,12 @@ export function buildLegacyServer(ctx: BrainContext): McpServer {
     server.registerTool(
       tool.name,
       { description: tool.description, inputSchema: tool.inputSchemaZod },
-      async (args: Record<string, unknown>) => await tool.run(args, ctx),
+      async (args: Record<string, unknown>) => {
+        // No call context: this era cannot ask the person anything, so a
+        // write goes straight through (owner) or to quarantine (agent).
+        const out = await callTool(tool.name, args, ctx);
+        return { content: out.content, ...(out.isError ? { isError: true } : {}) };
+      },
     );
   }
   return server;

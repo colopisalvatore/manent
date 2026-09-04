@@ -7,6 +7,7 @@ import {
   fusedRetriever,
   hybridRetriever,
   loadLocalEmbeddingModel,
+  statusAware,
   type Retriever,
 } from "@manent/retrieval";
 import {
@@ -78,18 +79,20 @@ export async function runEvalCommand(root: string, opts: EvalCliOptions): Promis
     );
   }
 
+  // Wrapped exactly as the server wraps them: what is measured is what ships,
+  // status demotion included.
   const build = (name: string): Retriever => {
     switch (name) {
       case "bm25":
-        return bm25Retriever(notes);
+        return statusAware(bm25Retriever(notes), notes);
       case "hybrid":
-        return hybridRetriever({ notes, graph });
+        return statusAware(hybridRetriever({ notes, graph }), notes);
       case "dense":
         if (!dense) throw new Error("dense index unavailable");
-        return denseRetriever(dense);
+        return statusAware(denseRetriever(dense), notes);
       case "fused":
         if (!dense) throw new Error("dense index unavailable");
-        return fusedRetriever(notes, dense);
+        return statusAware(fusedRetriever(notes, dense), notes);
       default:
         throw new Error(`unknown retriever: ${name}`);
     }

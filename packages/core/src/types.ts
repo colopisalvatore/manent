@@ -1,4 +1,4 @@
-import type { EdgeKind, NoteType } from "@manent/spec";
+import type { EdgeKind, NoteStatus, NoteType } from "@manent/spec";
 
 export interface NoteFrontmatter {
   name: string;
@@ -11,7 +11,11 @@ export interface NoteFrontmatter {
   supersedes?: string[];
   contradicts?: string[];
   confidence?: "high" | "medium" | "low";
-  status?: "active" | "deprecated" | "archived";
+  status?: NoteStatus;
+  /** who may read it; absent = private (owner only) */
+  audience?: string | string[];
+  /** identity that wrote it through the write path */
+  author?: string;
   [key: string]: unknown;
 }
 

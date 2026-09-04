@@ -1,9 +1,62 @@
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { z, type ZodRawShape } from "zod";
-import { neighbors, writeNote, WriteRefused } from "@manent/core";
-import { NOTE_TYPES } from "@manent/spec";
+import { neighbors, redactPii, scanInjection, scanPii, writeNote, WriteRefused, type WriteMode } from "@manent/core";
+import { AUDIENCE_PRIVATE, NOTE_TYPES, SLUG_RE } from "@manent/spec";
 import type { BrainContext } from "./context.js";
 import { scopeKey } from "./identity.js";
+
+/**
+ * The brain tools, defined once and independently of any protocol era.
+ *
+ * Each tool carries both schema forms on purpose: the legacy adapter feeds the
+ * official SDK, which wants Zod, while the modern adapter serves JSON Schema
+ * straight over the wire. Keeping both here means the two protocol paths can
+ * never drift in what they expose.
+ */
+export interface ToolResult {
+  content: Array<{ type: "text"; text: string }>;
+  isError?: boolean;
+  /**
+   * The tool cannot finish without the person's answer (MCP 2026-07-28
+   * multi round-trip request, `resultType: "input_required"`). The modern
+   * adapter puts this on the wire; the legacy one never sees it, because a
+   * tool only asks when the call context says the client can answer.
+   */
+  inputRequired?: { inputRequests: Record<string, unknown>; requestState: string };
+  /** what the audit line should carry beyond the tool name and arguments */
+  audit?: Record<string, unknown>;
+  /** the SDK's result type is open-ended; this keeps the shape assignable */
+  [key: string]: unknown;
+}
+
+/** What the transport knows about this call that the arguments do not say. */
+export interface CallContext {
+  /** answers to a previous `inputRequired`, keyed like the requests */
+  inputResponses?: Record<string, { action?: string; content?: Record<string, unknown> }>;
+  /** echoed from the previous `inputRequired` */
+  requestState?: string;
+  /** `io.modelcontextprotocol/clientCapabilities` of the request */
+  clientCapabilities?: Record<string, unknown>;
+}
+
+export interface BrainTool {
+  name: string;
+  description: string;
+  /** listed only on a writable server — a read-only vault should not advertise it */
+  requiresWrite?: boolean;
+  /** JSON Schema 2020-12 — the modern path serves this verbatim */
+  inputSchemaJson: Record<string, unknown>;
+  /** same contract expressed for the SDK's Zod-based registration */
+  inputSchemaZod: ZodRawShape;
+  run(args: Record<string, unknown>, ctx: BrainContext, call?: CallContext): ToolResult | Promise<ToolResult>;
+}
+
+const text = (value: unknown): ToolResult => ({
+  content: [{ type: "text", text: typeof value === "string" ? value : JSON.stringify(value, null, 2) }],
+});
+
+const refuse = (message: string): ToolResult => ({ content: [{ type: "text", text: message }], isError: true });
 
 /** A read of a name that a recent search by the same agent returned: that search helped. */
 function noteFollowed(ctx: BrainContext, name: string): void {
@@ -17,42 +70,11 @@ function noteFollowed(ctx: BrainContext, name: string): void {
   }
 }
 
-/**
- * The brain tools, defined once and independently of any protocol era.
- *
- * Each tool carries both schema forms on purpose: the legacy adapter feeds the
- * official SDK, which wants Zod, while the modern adapter serves JSON Schema
- * straight over the wire. Keeping both here means the two protocol paths can
- * never drift in what they expose.
- */
-export interface ToolResult {
-  content: Array<{ type: "text"; text: string }>;
-  isError?: boolean;
-  /** the SDK's result type is open-ended; this keeps the shape assignable */
-  [key: string]: unknown;
-}
-
-export interface BrainTool {
-  name: string;
-  description: string;
-  /** listed only on a writable server — a read-only vault should not advertise it */
-  requiresWrite?: boolean;
-  /** JSON Schema 2020-12 — the modern path serves this verbatim */
-  inputSchemaJson: Record<string, unknown>;
-  /** same contract expressed for the SDK's Zod-based registration */
-  inputSchemaZod: ZodRawShape;
-  run(args: Record<string, unknown>, ctx: BrainContext): ToolResult | Promise<ToolResult>;
-}
-
-const text = (value: unknown): ToolResult => ({
-  content: [{ type: "text", text: typeof value === "string" ? value : JSON.stringify(value, null, 2) }],
-});
-
 export const BRAIN_TOOLS: BrainTool[] = [
   {
     name: "brain_search",
     description:
-      "Search notes in the brain vault (BM25 baseline). Returns top-k matches with name, description, path and score.",
+      "Search notes in the brain vault. Returns {searchId, query, hits}: top-k matches with name, description, path and score. Open a hit with brain_read.",
     inputSchemaJson: {
       type: "object",
       properties: {
@@ -82,7 +104,7 @@ export const BRAIN_TOOLS: BrainTool[] = [
           console.error(`[manent] gap register write failed: ${err instanceof Error ? err.message : String(err)}`);
         }
       }
-      return text(searchId ? { searchId, query, hits } : { query, hits });
+      return { ...text(searchId ? { searchId, query, hits } : { query, hits }), audit: { results: hits.map((h) => h.name), searchId } };
     },
   },
   {
@@ -98,7 +120,7 @@ export const BRAIN_TOOLS: BrainTool[] = [
     run(args, ctx) {
       const name = String(args.name ?? "");
       const note = ctx.graph.nodes.get(name);
-      if (!note) return { content: [{ type: "text", text: `Note not found: ${name}` }], isError: true };
+      if (!note) return refuse(`Note not found: ${name}`);
       noteFollowed(ctx, name);
       return text(`frontmatter:\n${JSON.stringify(note.frontmatter, null, 2)}\n\nbody:\n${note.body}`);
     },
@@ -171,15 +193,12 @@ export const BRAIN_TOOLS: BrainTool[] = [
     async run(args, ctx) {
       const name = String(args.name ?? "");
       const note = ctx.graph.nodes.get(name);
-      if (!note) return { content: [{ type: "text", text: `Note not found: ${name}` }], isError: true };
+      if (!note) return refuse(`Note not found: ${name}`);
       noteFollowed(ctx, name);
       try {
         return text(await readFile(note.path, "utf8"));
       } catch (err) {
-        return {
-          content: [{ type: "text", text: `Read failed for ${note.relPath}: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
+        return refuse(`Read failed for ${note.relPath}: ${err instanceof Error ? err.message : String(err)}`);
       }
     },
   },
@@ -210,10 +229,7 @@ export const BRAIN_TOOLS: BrainTool[] = [
       try {
         re = new RegExp(pattern, flags.includes("g") ? flags : flags + "g");
       } catch (err) {
-        return {
-          content: [{ type: "text", text: `Bad regex: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
+        return refuse(`Bad regex: ${err instanceof Error ? err.message : String(err)}`);
       }
       const hits: Array<{ name: string; relPath: string; line: number; text: string }> = [];
       for (const n of ctx.notes) {
@@ -233,7 +249,7 @@ export const BRAIN_TOOLS: BrainTool[] = [
     name: "brain_write",
     requiresWrite: true,
     description:
-      "Create or replace a note. Requires name (slug), description (one line) and type. mode: 'create' (default, refuses to clobber) or 'overwrite'.",
+      "Create or replace a note. Requires name (slug), description (one line) and type. mode: 'create' (default, refuses to clobber) or 'overwrite'. Text with personal data or model-directed instructions is refused. An agent's note lands in its own quarantine directory, private, until a person promotes it.",
     inputSchemaJson: {
       type: "object",
       properties: {
@@ -241,8 +257,9 @@ export const BRAIN_TOOLS: BrainTool[] = [
         description: { type: "string", description: "one line: what this note is" },
         type: { type: "string", enum: [...NOTE_TYPES], description: "note type from the spec" },
         body: { type: "string", description: "markdown body, without frontmatter" },
-        dir: { type: "string", description: "vault-relative folder, e.g. 'memory' or 'projects/aios'" },
+        dir: { type: "string", description: "vault-relative folder, e.g. 'memory' or 'projects/aios' (owner only; agents write where they were granted)" },
         mode: { type: "string", enum: ["create", "overwrite"], description: "default 'create'" },
+        audience: { type: "array", items: { type: "string" }, description: "who may read it (owner only); default private" },
       },
       required: ["name", "description", "type", "body"],
       additionalProperties: false,
@@ -252,10 +269,11 @@ export const BRAIN_TOOLS: BrainTool[] = [
       description: z.string().describe("one line: what this note is"),
       type: z.enum(NOTE_TYPES).describe("note type from the spec"),
       body: z.string().describe("markdown body, without frontmatter"),
-      dir: z.string().optional().describe("vault-relative folder, e.g. 'memory'"),
+      dir: z.string().optional().describe("vault-relative folder, e.g. 'memory' (owner only)"),
       mode: z.enum(["create", "overwrite"]).optional().describe("default 'create'"),
+      audience: z.array(z.string()).optional().describe("who may read it (owner only); default private"),
     },
-    run: (args, ctx) => runWrite(ctx, { ...args, mode: args.mode ?? "create" }),
+    run: (args, ctx, call) => runWrite(ctx, { ...args, mode: args.mode ?? "create" }, call),
   },
   {
     name: "brain_append",
@@ -267,7 +285,7 @@ export const BRAIN_TOOLS: BrainTool[] = [
       properties: {
         name: { type: "string", description: "canonical slug of the existing note" },
         body: { type: "string", description: "markdown to append" },
-        dir: { type: "string", description: "vault-relative folder the note lives in" },
+        dir: { type: "string", description: "vault-relative folder the note lives in (owner only)" },
       },
       required: ["name", "body"],
       additionalProperties: false,
@@ -275,58 +293,130 @@ export const BRAIN_TOOLS: BrainTool[] = [
     inputSchemaZod: {
       name: z.string().describe("canonical slug of the existing note"),
       body: z.string().describe("markdown to append"),
-      dir: z.string().optional().describe("vault-relative folder the note lives in"),
+      dir: z.string().optional().describe("vault-relative folder the note lives in (owner only)"),
     },
-    run: (args, ctx) => runWrite(ctx, { ...args, mode: "append" }),
+    run: (args, ctx, call) => runWrite(ctx, { ...args, mode: "append" }, call),
   },
 ];
 
+const CONFIRM_KEY = "confirm-write";
+const fingerprint = (o: unknown) => createHash("sha256").update(JSON.stringify(o)).digest("base64url").slice(0, 32);
+
 /**
- * Shared body of the write tools: the gate, the write, the re-index.
+ * Shared body of the write tools: the gate, the identity rules, the approval,
+ * the write, the re-index.
  *
  * A refused write returns `isError` with the reason rather than throwing — the
  * caller is a model, and a sentence it can act on beats a stack trace.
  */
-async function runWrite(ctx: BrainContext, args: Record<string, unknown>): Promise<ToolResult> {
+async function runWrite(ctx: BrainContext, args: Record<string, unknown>, call?: CallContext): Promise<ToolResult> {
   if (!ctx.writable) {
-    return {
-      content: [
-        {
-          type: "text",
-          text: "This brain is read-only: the server was not started with --writable. Writes are refused.",
-        },
-      ],
-      isError: true,
-    };
+    return refuse("This brain is read-only: the server was not started with --writable. Writes are refused.");
   }
-  // An existing note carries its own folder; callers need not know it.
-  const dir =
-    args.dir != null
-      ? String(args.dir)
-      : (() => {
-          const found = ctx.graph.nodes.get(String(args.name ?? ""));
-          const at = found?.relPath.lastIndexOf("/") ?? -1;
-          return found && at > 0 ? found.relPath.slice(0, at) : undefined;
-        })();
+  const id = ctx.identity;
+  const name = String(args.name ?? "");
+  const mode = args.mode as WriteMode;
+  const body = String(args.body ?? "");
+  const description = args.description != null ? String(args.description) : undefined;
+  const type = args.type != null ? String(args.type) : undefined;
+
+  // ── Who may write where, and what the note is stamped with ────────────────
+  let dir: string | undefined;
+  const stamp: Record<string, unknown> = { author: id.name };
+  if (id.owner) {
+    // An existing note carries its own folder; callers need not know it.
+    dir = args.dir != null ? String(args.dir) : existingDir(ctx, name);
+    if (args.audience !== undefined) {
+      const labels = (Array.isArray(args.audience) ? args.audience : [args.audience]).map((a) => String(a).trim().toLowerCase());
+      const bad = labels.find((l) => !SLUG_RE.test(l));
+      if (bad !== undefined) return refuse(`Illegal audience label "${bad}": use slugs`);
+      stamp.audience = labels;
+    }
+  } else {
+    if (!id.writeDir) return refuse(`${id.name} is read-only: no write directory was granted to this identity.`);
+    // Nobody but the owner chooses the folder, the status or the audience: an
+    // agent's note is a proposal, kept apart and private until a person
+    // promotes it — whatever the call asked for.
+    dir = id.writeDir;
+    stamp.status = "quarantine";
+    stamp.audience = [AUDIENCE_PRIVATE];
+  }
+
+  // ── The gate: nothing personal, nothing that reads as an instruction ──────
+  const scanned = `${description ?? ""}\n${body}`;
+  const injection = scanInjection(scanned);
+  if (injection.length > 0) {
+    return refuse(
+      `Refused: the text reads as an instruction aimed at a model (${injection.map((f) => `${f.kind} at line ${f.line}`).join(", ")}). Notes hold knowledge, not directives.`,
+    );
+  }
+  const pii = scanPii(scanned);
+  if (pii.length > 0) {
+    return refuse(
+      `Refused: the text carries personal data (${pii.map((f) => `${f.count} ${f.kind}`).join(", ")}). A vault lives in git and git history is forever — remove it and retry.`,
+    );
+  }
+
+  // ── The person confirms, when the client can ask them ─────────────────────
+  // MCP 2026-07-28: the tool answers `input_required` with a form; the client
+  // retries the same call carrying the answer. Stateless on this side — the
+  // request state is a fingerprint of what was proposed, so an altered retry
+  // is asked again rather than trusted.
+  const elicitation = call?.clientCapabilities?.elicitation;
+  if (elicitation && typeof elicitation === "object") {
+    const state = fingerprint({ name, dir, mode, type, description, body, agent: id.name });
+    const answer = call?.inputResponses?.[CONFIRM_KEY];
+    if (!answer || call?.requestState !== state) {
+      const where = dir ? `${dir}/${name}.md` : `${name}.md`;
+      const preview = body.length > 400 ? `${body.slice(0, 400)}…` : body;
+      return {
+        content: [{ type: "text", text: `Waiting for the person to confirm the ${mode} of ${where}.` }],
+        inputRequired: {
+          inputRequests: {
+            [CONFIRM_KEY]: {
+              method: "elicitation/create",
+              params: {
+                mode: "form",
+                message:
+                  `${id.name} wants to ${mode} the note ${where}${type ? ` (${type})` : ""}${stamp.status ? " — it will land in quarantine, private, until you promote it" : ""}.\n\n` +
+                  `${description ?? ""}\n\n${preview}`,
+                requestedSchema: {
+                  type: "object",
+                  properties: {
+                    confirm: { type: "boolean", title: "Write this note?", description: "Nothing is written unless you confirm.", default: false },
+                  },
+                  required: ["confirm"],
+                },
+              },
+            },
+          },
+          requestState: state,
+        },
+        audit: { pending: "confirmation" },
+      };
+    }
+    if (answer.action !== "accept" || answer.content?.confirm !== true) {
+      return { ...text(`Write not confirmed (${answer.action ?? "no answer"}): nothing was written.`), audit: { declined: true } };
+    }
+  }
 
   try {
-    const res = await writeNote(ctx.root, {
-      name: String(args.name ?? ""),
-      dir,
-      type: args.type != null ? String(args.type) : undefined,
-      description: args.description != null ? String(args.description) : undefined,
-      body: String(args.body ?? ""),
-      mode: args.mode as "create" | "overwrite" | "append",
-    });
+    const res = await writeNote(ctx.root, { name, dir, type, description, body, mode, frontmatter: stamp });
     await ctx.applyWrite(res.note);
-    return text({ ok: true, relPath: res.relPath, created: res.created, bytes: res.note.body.length });
-  } catch (err) {
-    if (err instanceof WriteRefused) return { content: [{ type: "text", text: err.message }], isError: true };
     return {
-      content: [{ type: "text", text: `Write failed: ${err instanceof Error ? err.message : String(err)}` }],
-      isError: true,
+      ...text({ ok: true, relPath: res.relPath, created: res.created, bytes: res.note.body.length, ...(stamp.status ? { status: stamp.status } : {}) }),
+      audit: { relPath: res.relPath, created: res.created },
     };
+  } catch (err) {
+    if (err instanceof WriteRefused) return refuse(err.message);
+    return refuse(`Write failed: ${err instanceof Error ? err.message : String(err)}`);
   }
+}
+
+function existingDir(ctx: BrainContext, name: string): string | undefined {
+  const found = ctx.graph.nodes.get(name);
+  const at = found?.relPath.lastIndexOf("/") ?? -1;
+  return found && at > 0 ? found.relPath.slice(0, at) : undefined;
 }
 
 export const findTool = (name: string): BrainTool | undefined => BRAIN_TOOLS.find((t) => t.name === name);
@@ -341,3 +431,44 @@ export const findTool = (name: string): BrainTool | undefined => BRAIN_TOOLS.fin
  */
 export const toolsFor = (ctx: Pick<BrainContext, "writable">): BrainTool[] =>
   BRAIN_TOOLS.filter((t) => !t.requiresWrite || ctx.writable);
+
+const AUDITED_ARGS = ["query", "name", "pattern", "type", "dir", "mode", "verdict", "searchId", "note"] as const;
+
+/**
+ * Every tool call, from either era, goes through here: one place for the
+ * audit line and for turning an exception into an answer the model can read.
+ */
+export async function callTool(
+  name: string,
+  args: Record<string, unknown>,
+  ctx: BrainContext,
+  call?: CallContext,
+): Promise<ToolResult> {
+  const tool = findTool(name);
+  if (!tool) return refuse(`Unknown tool: ${name}`);
+  const started = Date.now();
+  let out: ToolResult;
+  try {
+    out = await tool.run(args, ctx, call);
+  } catch (err) {
+    out = refuse(`${name} failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  if (ctx.audit) {
+    const shown: Record<string, unknown> = {};
+    for (const k of AUDITED_ARGS) {
+      if (typeof args[k] !== "string") continue;
+      // Free text is redacted before it is written anywhere, the audit included.
+      shown[k] = k === "query" || k === "pattern" ? redactPii(String(args[k])).text.slice(0, 200) : args[k];
+    }
+    ctx.audit.log({
+      ts: new Date(started).toISOString(),
+      agent: ctx.identity.name,
+      tool: name,
+      ok: !out.isError,
+      ms: Date.now() - started,
+      ...shown,
+      ...(out.audit ?? {}),
+    });
+  }
+  return out;
+}

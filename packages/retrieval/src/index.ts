@@ -27,3 +27,4 @@ export {
   type ChunkOptions,
 } from "./chunk.js";
 export { fusedRetriever, type FusedOptions } from "./fused.js";
+export { statusAware, DEFAULT_STATUS_WEIGHTS } from "./status.js";

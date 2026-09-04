@@ -2,12 +2,13 @@ import { createHash, createHmac, randomUUID, randomBytes, timingSafeEqual } from
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 /**
- * Minimal OAuth 2.1 authorization server, sized for a single-owner vault.
+ * Minimal OAuth 2.1 authorization server, sized for one vault.
  *
  * Clients such as claude.ai will not talk to a remote MCP server that has no
- * discoverable OAuth metadata, so bearer-only is not enough. The vault token
- * plays the role of the login password: the owner pastes it on the consent
- * page, and the server issues an access token derived from it.
+ * discoverable OAuth metadata, so bearer-only is not enough. A static token
+ * plays the role of the login password: the owner pastes the vault token, an
+ * agent pastes its own, and the server issues an access token that names who
+ * it was issued to.
  *
  * Access tokens are HMAC-derived from the master token rather than stored, so
  * they survive restarts (this service restarts whenever the vault syncs) with
@@ -17,11 +18,13 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 
 const CODE_TTL_MS = 5 * 60_000;
 const DEFAULT_ALLOWED_REDIRECT_HOSTS = ["claude.ai", "claude.com", "localhost", "127.0.0.1"];
+export const OWNER_SUBJECT = "owner";
 
 interface PendingCode {
   clientId: string;
   redirectUri: string;
   codeChallenge: string;
+  subject: string;
   expiresAt: number;
 }
 
@@ -36,17 +39,33 @@ function constantTimeEqual(a: string, b: string): boolean {
   return timingSafeEqual(ba, bb);
 }
 
-/** access token = <clientId>.<HMAC(master, clientId)> — verifiable without storage. */
-function mintAccessToken(masterToken: string, clientId: string): string {
-  const mac = createHmac("sha256", masterToken).update(clientId).digest();
-  return `${clientId}.${b64url(mac)}`;
+/**
+ * access token = <subject>~<clientId>.<HMAC(master, subject~clientId)>
+ *
+ * The owner's tokens keep the older two-part form <clientId>.<HMAC(master,
+ * clientId)>: a connector authorized before identities existed stays valid
+ * across the upgrade instead of asking its user to log in again.
+ */
+export function mintAccessToken(masterToken: string, clientId: string, subject: string = OWNER_SUBJECT): string {
+  const id = subject === OWNER_SUBJECT ? clientId : `${subject}~${clientId}`;
+  const mac = createHmac("sha256", masterToken).update(id).digest();
+  return `${id}.${b64url(mac)}`;
+}
+
+/** The subject an access token was issued to, or undefined when it does not verify. */
+export function subjectOfAccessToken(masterToken: string, presented: string): string | undefined {
+  const dot = presented.lastIndexOf(".");
+  if (dot <= 0) return undefined;
+  const id = presented.slice(0, dot);
+  const tilde = id.indexOf("~");
+  const subject = tilde > 0 ? id.slice(0, tilde) : OWNER_SUBJECT;
+  const clientId = tilde > 0 ? id.slice(tilde + 1) : id;
+  if (!clientId) return undefined;
+  return constantTimeEqual(presented, mintAccessToken(masterToken, clientId, subject)) ? subject : undefined;
 }
 
 export function verifyAccessToken(masterToken: string, presented: string): boolean {
-  const dot = presented.lastIndexOf(".");
-  if (dot <= 0) return false;
-  const clientId = presented.slice(0, dot);
-  return constantTimeEqual(presented, mintAccessToken(masterToken, clientId));
+  return subjectOfAccessToken(masterToken, presented) !== undefined;
 }
 
 function externalOrigin(req: IncomingMessage): string {
@@ -91,10 +110,10 @@ function consentPage(params: Record<string, string>, error?: string): string {
  .err{color:#c0392b;font-size:.875rem;margin-top:.75rem}
  code{font-size:.8125rem;opacity:.7}
 </style>
-<h1>Authorize access to your vault</h1>
-<p>A client is asking to read this Manent brain. Paste the vault token to approve.</p>
+<h1>Authorize access to this vault</h1>
+<p>A client is asking to read this Manent brain. Paste your access token — the vault token, or the token of the agent you are connecting — to approve.</p>
 <form method="post">${hidden}
- <label for="t">Vault token</label>
+ <label for="t">Access token</label>
  <input id="t" name="vault_token" type="password" autocomplete="off" autofocus required>
  <button type="submit">Approve access</button>
  ${error ? `<div class="err">${escapeHtml(error)}</div>` : ""}
@@ -122,6 +141,11 @@ async function readForm(req: IncomingMessage): Promise<URLSearchParams> {
 export interface OAuthOptions {
   masterToken: string;
   allowedRedirectHosts?: string[];
+  /**
+   * Maps a token pasted on the consent page to the subject it identifies.
+   * Default: the master token is the owner, anything else is refused.
+   */
+  resolveSubject?: (presented: string) => string | undefined;
 }
 
 /**
@@ -136,6 +160,7 @@ export async function handleOAuth(
 ): Promise<boolean> {
   const origin = externalOrigin(req);
   const allowedHosts = opts.allowedRedirectHosts ?? DEFAULT_ALLOWED_REDIRECT_HOSTS;
+  const resolveSubject = opts.resolveSubject ?? ((t: string) => (constantTimeEqual(t, opts.masterToken) ? OWNER_SUBJECT : undefined));
 
   // Resource metadata may be probed at a path-suffixed URL too.
   if (path === "/.well-known/oauth-protected-resource" || path.startsWith("/.well-known/oauth-protected-resource/")) {
@@ -207,14 +232,15 @@ export async function handleOAuth(
     }
 
     const presented = src.get("vault_token") ?? "";
-    if (!presented || !constantTimeEqual(presented, opts.masterToken)) {
+    const subject = presented ? resolveSubject(presented) : undefined;
+    if (!subject) {
       res.writeHead(401, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
       res.end(consentPage(carried, "Wrong token. Try again."));
       return true;
     }
 
     const code = b64url(randomBytes(32));
-    codes.set(code, { clientId, redirectUri, codeChallenge: challenge, expiresAt: Date.now() + CODE_TTL_MS });
+    codes.set(code, { clientId, redirectUri, codeChallenge: challenge, subject, expiresAt: Date.now() + CODE_TTL_MS });
     for (const [k, v] of codes) if (v.expiresAt < Date.now()) codes.delete(k);
 
     const to = new URL(redirectUri);
@@ -248,7 +274,7 @@ export async function handleOAuth(
       return true;
     }
     json(res, 200, {
-      access_token: mintAccessToken(opts.masterToken, entry.clientId),
+      access_token: mintAccessToken(opts.masterToken, entry.clientId, entry.subject),
       token_type: "Bearer",
       scope: "brain.read",
     });

@@ -42,7 +42,28 @@
     "supersedes": { "type": "array", "items": { "type": "string" } },
     "contradicts": { "type": "array", "items": { "type": "string" } },
     "confidence": { "enum": ["high", "medium", "low"] },
-    "status": { "enum": ["active", "deprecated", "archived"] }
+    "status": {
+      "enum": ["active", "quarantine", "deprecated", "archived"],
+      "description": "quarantine = written by an agent with no human in the loop, not yet promoted; ranked below active notes."
+    },
+    "audience": {
+      "description": "Who may read this note. Absent or empty means `private`: only the vault owner. `public` is the only label that may be served outside the organisation; every other label is defined by the vault.",
+      "oneOf": [
+        { "$ref": "#/$defs/audienceLabel" },
+        { "type": "array", "items": { "$ref": "#/$defs/audienceLabel" }, "uniqueItems": true }
+      ]
+    },
+    "author": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:[_-][a-z0-9]+)*$",
+      "description": "Identity that wrote the note through the write path: an agent slug, or `owner`."
+    }
   },
-  "additionalProperties": true
+  "additionalProperties": true,
+  "$defs": {
+    "audienceLabel": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:[_-][a-z0-9]+)*$"
+    }
+  }
 }

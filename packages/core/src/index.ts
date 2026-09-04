@@ -5,3 +5,4 @@ export * from "./graph.js";
 export * from "./links.js";
 export * from "./write.js";
 export * from "./redact.js";
+export * from "./audience.js";

@@ -23,7 +23,8 @@
     "test:warmup": "node scripts/warmup-test.mjs",
     "test:write": "node scripts/write-test.mjs",
     "test:links": "node scripts/links-test.mjs",
-    "test:gaps": "node scripts/gaps-test.mjs"
+    "test:gaps": "node scripts/gaps-test.mjs",
+    "test:acl": "node scripts/acl-test.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",

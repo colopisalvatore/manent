@@ -30,8 +30,14 @@ program
   .description("validate every note against the spec (schema, links, structure)")
   .argument("[dir]", "vault directory", ".")
   .option("--strict-links", "treat unresolved wikilinks as errors")
-  .action(async (dir: string, opts: { strictLinks?: boolean }) => {
-    const res = await lintVault(resolve(dir), { strictLinks: !!opts.strictLinks });
+  .option("--strict-content", "treat personal data and model-directed text as errors (the CI gate)")
+  .option("--audiences <labels>", "comma-separated audience labels the vault allows; others are reported")
+  .action(async (dir: string, opts: { strictLinks?: boolean; strictContent?: boolean; audiences?: string }) => {
+    const res = await lintVault(resolve(dir), {
+      strictLinks: !!opts.strictLinks,
+      strictContent: !!opts.strictContent,
+      audiences: opts.audiences?.split(",").map((a) => a.trim()).filter(Boolean),
+    });
     console.log(formatFindings(res));
     if (res.errors > 0) process.exitCode = 1;
   });
@@ -100,6 +106,8 @@ program
   .option("--writable", "enable the write tools (brain_write, brain_append) — off by default")
   .option("--gaps <path>", "record every search into a gap register (sqlite file outside the vault; or env MANENT_GAPS)")
   .option("--gaps-threshold <cosine>", "similarity above which two questions are the same gap (default 0.9)")
+  .option("--agents <file>", "JSON of agent identities for --http: name → {token, read: [audiences], write: dir}")
+  .option("--audit <path>", "append one JSONL line per tool call, with the calling identity")
   .action(
     async (
       dir: string,
@@ -113,6 +121,8 @@ program
         writable?: boolean;
         gaps?: string;
         gapsThreshold?: string;
+        agents?: string;
+        audit?: string;
       },
     ) => {
       const root = resolve(dir);
@@ -130,9 +140,12 @@ program
       }
       const gaps = gapsFrom(opts);
       if (gaps) console.error(`[manent] gap register: ${gaps.path}`);
+      const audit = opts.audit ? resolve(opts.audit) : undefined;
+      if (audit) console.error(`[manent] audit log: ${audit}`);
 
       if (!opts.http) {
-        const ctx = await serveStdio(root, { retriever, model: opts.model, writable, gaps });
+        if (opts.agents) console.error("[manent] --agents applies to --http only: stdio is the owner's own session");
+        const ctx = await serveStdio(root, { retriever, model: opts.model, writable, gaps, audit });
         for (const sig of ["SIGINT", "SIGTERM"] as const) process.on(sig, () => void ctx.close().finally(() => process.exit(0)));
         return;
       }
@@ -151,6 +164,8 @@ program
         model: opts.model,
         writable,
         gaps,
+        agents: opts.agents ? resolve(opts.agents) : undefined,
+        audit,
       });
     },
   );

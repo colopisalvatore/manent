@@ -2,7 +2,7 @@
 // for the eval harness, so what ships is what gets measured.
 export { bm25Retriever, hybridRetriever, buildSearchIndex, type Retriever, type Hit } from "@manent/retrieval";
 export { loadBrainContext, type BrainContext, type RetrieverName, type LoadContextOptions, type GapsOptions } from "./context.js";
-export { BRAIN_TOOLS, findTool, toolsFor, type BrainTool, type ToolResult } from "./tools.js";
+export { BRAIN_TOOLS, callTool, findTool, toolsFor, type BrainTool, type ToolResult, type CallContext } from "./tools.js";
 export { OWNER, loadAgents, identityForToken, scopeKey, type Identity, type AgentSpec } from "./identity.js";
 export {
   GapStore,
@@ -15,6 +15,7 @@ export {
   type FeedbackVerdict,
   type GapStoreOptions,
 } from "./gaps.js";
+export { AuditLog, type AuditEntry } from "./audit.js";
 
 // Legacy era — handshake revisions, served by the official SDK.
 export {
@@ -35,4 +36,4 @@ export {
 } from "./modern.js";
 
 export { serveHttp, type HttpOptions } from "./http.js";
-export { verifyAccessToken, handleOAuth, type OAuthOptions } from "./oauth.js";
+export { verifyAccessToken, subjectOfAccessToken, mintAccessToken, handleOAuth, type OAuthOptions } from "./oauth.js";

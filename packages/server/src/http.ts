@@ -1,15 +1,15 @@
 import { createServer, type IncomingMessage, type Server } from "node:http";
-import { createHash, timingSafeEqual } from "node:crypto";
 import { loadBrainContext, type GapsOptions, type RetrieverName } from "./context.js";
+import { identityForToken, loadAgents, OWNER, stripToken, type Identity } from "./identity.js";
 import { LEGACY_VERSIONS, serveLegacyHttp } from "./legacy.js";
 import { handleModernRequest, isModernRequest, MODERN_VERSIONS } from "./modern.js";
-import { handleOAuth, verifyAccessToken } from "./oauth.js";
+import { handleOAuth, subjectOfAccessToken } from "./oauth.js";
 
 export interface HttpOptions {
   port: number;
   /** bind address — defaults to 127.0.0.1 so only a local tunnel/proxy can reach it */
   host?: string;
-  /** required bearer token; also the password of the OAuth consent page */
+  /** required bearer token of the owner; also a password of the OAuth consent page */
   token: string;
   /** extra hosts allowed as OAuth redirect targets (claude.ai is allowed by default) */
   allowedRedirectHosts?: string[];
@@ -26,6 +26,10 @@ export interface HttpOptions {
   writable?: boolean;
   /** record searches into a gap register */
   gaps?: GapsOptions;
+  /** JSON file of agent identities: name → {token, read, write} */
+  agents?: string;
+  /** append one JSONL line per tool call */
+  audit?: string;
 }
 
 /** Public origin as seen by the client, honouring the tunnel/proxy headers. */
@@ -34,9 +38,6 @@ function externalOrigin(req: IncomingMessage): string {
   const host = (req.headers["x-forwarded-host"] as string | undefined) ?? req.headers.host ?? "localhost";
   return `${proto}://${host}`;
 }
-
-const sha = (s: string) => createHash("sha256").update(s, "utf8").digest();
-const safeEqual = (a: string, b: string) => timingSafeEqual(sha(a), sha(b));
 
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {
   if (req.method !== "POST") return undefined;
@@ -57,22 +58,41 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
  * expose different capabilities.
  *
  * Auth, two accepted forms:
- *   1. `Authorization: Bearer <token>` — the vault token or an OAuth-issued one
+ *   1. `Authorization: Bearer <token>` — the owner's vault token, an agent's
+ *      token from the `--agents` file, or an OAuth-issued token for either
  *   2. `/t/<token>/mcp` path prefix, for clients that can set neither headers
  *      nor complete OAuth. A capability URL is a credential: treat it like a
  *      password and rotate by restarting with a new token.
+ *
+ * The credential resolves to an identity, and the identity to a view of the
+ * vault (`ctx.forIdentity`): every request is answered from the notes its
+ * caller may read, whichever tool it uses.
  */
 export async function serveHttp(root: string, opts: HttpOptions): Promise<Server> {
   if (!opts.token || opts.token.length < 16) {
     throw new Error("http mode requires a token of at least 16 chars (--token or MANENT_HTTP_TOKEN)");
   }
+  const agents = opts.agents ? await loadAgents(opts.agents) : new Map<string, Identity & { token: string }>();
   const ctx = await loadBrainContext(root, {
     retriever: opts.retriever,
     model: opts.model,
     writable: opts.writable,
     gaps: opts.gaps,
+    audit: opts.audit,
   });
   const pinned = opts.era ?? "auto";
+
+  /** A static token (owner or agent) or an OAuth-issued one, to the identity it names. */
+  const resolveIdentity = (presented: string): Identity | undefined => {
+    const direct = identityForToken(opts.token, agents, presented);
+    if (direct) return direct;
+    const subject = subjectOfAccessToken(opts.token, presented);
+    if (subject === undefined) return undefined;
+    if (subject === OWNER.name) return OWNER;
+    // An agent removed from the file loses access even with a token in hand.
+    const agent = agents.get(subject);
+    return agent ? stripToken(agent) : undefined;
+  };
 
   const httpServer = createServer(async (req, res) => {
     try {
@@ -83,9 +103,10 @@ export async function serveHttp(root: string, opts: HttpOptions): Promise<Server
       // a client that "cannot reach the server" is pure guesswork.
       const shown = path.replace(/^\/t\/[^/]+/, "/t/***");
       let era = "-";
+      let who = "-";
       res.on("finish", () => {
         console.log(
-          `${req.method} ${shown} → ${res.statusCode}  era=${era}  ua=${req.headers["user-agent"] ?? "-"}  accept=${req.headers.accept ?? "-"}`,
+          `${req.method} ${shown} → ${res.statusCode}  era=${era}  who=${who}  ua=${req.headers["user-agent"] ?? "-"}  accept=${req.headers.accept ?? "-"}`,
         );
       });
 
@@ -113,6 +134,7 @@ export async function serveHttp(root: string, opts: HttpOptions): Promise<Server
         await handleOAuth(req, res, path.replace(/^\/t\/[^/]+/, ""), {
           masterToken: opts.token,
           allowedRedirectHosts: opts.allowedRedirectHosts,
+          resolveSubject: (presented) => identityForToken(opts.token, agents, presented)?.name,
         })
       ) {
         return;
@@ -126,11 +148,8 @@ export async function serveHttp(root: string, opts: HttpOptions): Promise<Server
         provided ??= decodeURIComponent(pathToken[1]);
         path = pathToken[2];
       }
-      // Accept either the vault token itself or an OAuth-issued access token.
-      const authorized =
-        provided !== undefined &&
-        (safeEqual(provided, opts.token) || verifyAccessToken(opts.token, provided));
-      if (!authorized) {
+      const identity = provided !== undefined ? resolveIdentity(provided) : undefined;
+      if (!identity) {
         // Point unauthenticated clients at the metadata that tells them how to
         // authenticate (RFC 9728) — without it they cannot start the flow.
         res.writeHead(401, {
@@ -140,6 +159,7 @@ export async function serveHttp(root: string, opts: HttpOptions): Promise<Server
         res.end(JSON.stringify({ error: "unauthorized" }));
         return;
       }
+      who = identity.name;
 
       if (path !== "/mcp") {
         res.writeHead(404, { "content-type": "application/json" });
@@ -148,13 +168,14 @@ export async function serveHttp(root: string, opts: HttpOptions): Promise<Server
       }
 
       const body = await readJsonBody(req);
+      const view = ctx.forIdentity(identity);
 
       // ── Era routing: exactly one implementation answers ──────────────────
       const useModern = pinned === "modern" || (pinned === "auto" && isModernRequest(body));
       era = useModern ? "modern" : "legacy";
 
       if (useModern) {
-        const response = await handleModernRequest(body, ctx);
+        const response = await handleModernRequest(body, view);
         if (!response) {
           res.writeHead(202).end(); // notification: accepted, nothing to return
           return;
@@ -177,7 +198,7 @@ export async function serveHttp(root: string, opts: HttpOptions): Promise<Server
         );
         return;
       }
-      await serveLegacyHttp(req, res, body, ctx);
+      await serveLegacyHttp(req, res, body, view);
     } catch {
       if (!res.headersSent) {
         res.writeHead(500, { "content-type": "application/json" });
@@ -189,7 +210,9 @@ export async function serveHttp(root: string, opts: HttpOptions): Promise<Server
   const host = opts.host ?? "127.0.0.1";
   await new Promise<void>((resolve) => httpServer.listen(opts.port, host, resolve));
   console.log(
-    `manent MCP endpoint on http://${host}:${opts.port}/mcp — era=${pinned} (legacy ${LEGACY_VERSIONS.join(", ")} | modern ${MODERN_VERSIONS.join(", ")}), auth required`,
+    `manent MCP endpoint on http://${host}:${opts.port}/mcp — era=${pinned} (legacy ${LEGACY_VERSIONS.join(", ")} | modern ${MODERN_VERSIONS.join(", ")}), auth required` +
+      (agents.size > 0 ? `, ${agents.size} agent identit${agents.size === 1 ? "y" : "ies"}` : ""),
   );
+  httpServer.on("close", () => void ctx.close());
   return httpServer;
 }

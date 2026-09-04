@@ -1,19 +1,22 @@
 import type { BrainContext } from "./context.js";
-import { findTool, toolsFor } from "./tools.js";
+import { callTool, findTool, toolsFor, type CallContext } from "./tools.js";
 
 /**
  * Modern era: MCP revision 2026-07-28 and later, implemented natively.
  *
  * No handshake, no sessions — every request carries its own protocol version
- * and is served on its own. Results declare `resultType`, and list results
- * carry the caching hints that revision requires. This path does not use the
- * official SDK, which still speaks the legacy revisions; see `./legacy.ts`.
+ * and is served on its own. Results declare `resultType`, list results carry
+ * the caching hints that revision requires, and a tool that needs the person's
+ * answer returns `input_required` (multi round-trip request) instead of
+ * blocking. This path does not use the official SDK, which still speaks the
+ * legacy revisions; see `./legacy.ts`.
  */
 
 export const MODERN_VERSIONS = ["2026-07-28"] as const;
 export const SERVER_INFO = { name: "manent", version: "0.0.1" } as const;
 
 const PROTOCOL_VERSION_KEY = "io.modelcontextprotocol/protocolVersion";
+const CLIENT_CAPABILITIES_KEY = "io.modelcontextprotocol/clientCapabilities";
 const SERVER_INFO_KEY = "io.modelcontextprotocol/serverInfo";
 
 /** Error codes reserved for the specification (see the 2026-07-28 allocation policy). */
@@ -30,14 +33,18 @@ export interface JsonRpcResponse {
   error?: { code: number; message: string; data?: unknown };
 }
 
-/** Reads the per-request protocol version from `_meta` (body or params). */
-export function declaredProtocolVersion(body: Record<string, unknown>): string | undefined {
+/** The per-request protocol fields, from `_meta` on the body or on the params. */
+function requestMeta(body: Record<string, unknown>): Record<string, unknown> {
   const params = (body.params ?? {}) as Record<string, unknown>;
-  const meta = {
+  return {
     ...((body._meta as Record<string, unknown>) ?? {}),
     ...((params._meta as Record<string, unknown>) ?? {}),
   };
-  const v = meta[PROTOCOL_VERSION_KEY];
+}
+
+/** Reads the per-request protocol version from `_meta` (body or params). */
+export function declaredProtocolVersion(body: Record<string, unknown>): string | undefined {
+  const v = requestMeta(body)[PROTOCOL_VERSION_KEY];
   return typeof v === "string" ? v : undefined;
 }
 
@@ -100,7 +107,8 @@ export async function handleModernRequest(
           supportedVersions: [...MODERN_VERSIONS],
           capabilities: { tools: {} },
           instructions:
-            "File-first memory vault. Search with brain_search, open a note with brain_read, walk its links with brain_neighbors.",
+            "File-first memory vault. Search with brain_search, open a note with brain_read, walk its links with brain_neighbors. " +
+            "Writes, where allowed, ask the person to confirm and land in quarantine for agents.",
           ttlMs: LIST_TTL_MS,
           cacheScope: "private",
         }),
@@ -123,16 +131,30 @@ export async function handleModernRequest(
 
     case "tools/call": {
       const params = (b.params ?? {}) as Record<string, unknown>;
-      const tool = findTool(String(params.name ?? ""));
-      if (!tool) {
+      const name = String(params.name ?? "");
+      if (!findTool(name)) {
+        return { jsonrpc: "2.0", id, error: { code: INVALID_PARAMS, message: `Unknown tool: ${name}` } };
+      }
+      const args = (params.arguments ?? {}) as Record<string, unknown>;
+      const caps = requestMeta(b)[CLIENT_CAPABILITIES_KEY];
+      const call: CallContext = {
+        inputResponses: (params.inputResponses ?? undefined) as CallContext["inputResponses"],
+        requestState: typeof params.requestState === "string" ? params.requestState : undefined,
+        clientCapabilities: caps && typeof caps === "object" ? (caps as Record<string, unknown>) : undefined,
+      };
+      const out = await callTool(name, args, ctx, call);
+      if (out.inputRequired) {
         return {
           jsonrpc: "2.0",
           id,
-          error: { code: INVALID_PARAMS, message: `Unknown tool: ${String(params.name)}` },
+          result: {
+            resultType: "input_required",
+            inputRequests: out.inputRequired.inputRequests,
+            requestState: out.inputRequired.requestState,
+            _meta: { [SERVER_INFO_KEY]: SERVER_INFO },
+          },
         };
       }
-      const args = (params.arguments ?? {}) as Record<string, unknown>;
-      const out = await tool.run(args, ctx);
       return {
         jsonrpc: "2.0",
         id,

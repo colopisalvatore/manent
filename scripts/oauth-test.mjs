@@ -47,7 +47,7 @@ try {
 
   // 4a. consent page renders
   const page = await fetch(`${BASE}/authorize?${q}`);
-  ok("consent page 200 html", page.status === 200 && (await page.text()).includes("Vault token"));
+  ok("consent page 200 html", page.status === 200 && (await page.text()).includes("token"));
 
   // 4b. wrong token rejected
   const bad = await fetch(`${BASE}/authorize`, {
@@ -102,7 +102,7 @@ try {
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
   });
   const callBody = await call.json();
-  ok("access token → tools/list works", call.status === 200 && callBody.result?.tools?.length === 3);
+  ok("access token → tools/list works", call.status === 200 && callBody.result?.tools?.some((t) => t.name === "brain_search"));
 
   // 9. forged access token rejected
   const forged = await fetch(`${BASE}/mcp`, {

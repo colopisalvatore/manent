@@ -33,6 +33,12 @@ export interface WriteNoteInput {
   /** markdown body, without frontmatter */
   body: string;
   mode?: WriteMode;
+  /**
+   * Extra frontmatter set by the caller — `author`, `status`, `audience`.
+   * Applied over what the note already had and under the required trio, so
+   * a caller can stamp a note but never unset its name, description or type.
+   */
+  frontmatter?: Record<string, unknown>;
 }
 
 export interface WriteResult {
@@ -123,11 +129,19 @@ export async function writeNote(root: string, input: WriteNoteInput): Promise<Wr
   const body =
     mode === "append" && previous ? `${previous.body.replace(/\s*$/, "")}\n\n${input.body.trim()}\n` : `${input.body.trim()}\n`;
 
+  // YAML parses bare dates as Date objects; written back they would become
+  // timestamps. Normalize to the YYYY-MM-DD the spec asks for.
+  const kept: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(previous?.frontmatter ?? {})) kept[k] = v instanceof Date ? v.toISOString().slice(0, 10) : v;
+  const today = new Date().toISOString().slice(0, 10);
   const frontmatter: Record<string, unknown> = {
-    ...(previous?.frontmatter ?? {}),
+    ...kept,
+    ...(input.frontmatter ?? {}),
     name,
     description: String(description).trim(),
     type,
+    created: typeof kept.created === "string" ? kept.created : today,
+    updated: today,
   };
 
   const raw = matter.stringify(body, frontmatter);
