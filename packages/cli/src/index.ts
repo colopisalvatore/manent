@@ -108,6 +108,7 @@ program
   .option("--gaps-threshold <cosine>", "similarity above which two questions are the same gap (default 0.9)")
   .option("--agents <file>", "JSON of agent identities for --http: name → {token, read: [audiences], write: dir}")
   .option("--audit <path>", "append one JSONL line per tool call, with the calling identity")
+  .option("--no-watch", "do not re-index when notes change on disk (on by default)")
   .action(
     async (
       dir: string,
@@ -123,6 +124,7 @@ program
         gapsThreshold?: string;
         agents?: string;
         audit?: string;
+        watch: boolean;
       },
     ) => {
       const root = resolve(dir);
@@ -145,7 +147,7 @@ program
 
       if (!opts.http) {
         if (opts.agents) console.error("[manent] --agents applies to --http only: stdio is the owner's own session");
-        const ctx = await serveStdio(root, { retriever, model: opts.model, writable, gaps, audit });
+        const ctx = await serveStdio(root, { retriever, model: opts.model, writable, gaps, audit, watch: opts.watch });
         for (const sig of ["SIGINT", "SIGTERM"] as const) process.on(sig, () => void ctx.close().finally(() => process.exit(0)));
         return;
       }
@@ -166,6 +168,7 @@ program
         gaps,
         agents: opts.agents ? resolve(opts.agents) : undefined,
         audit,
+        watch: opts.watch,
       });
     },
   );

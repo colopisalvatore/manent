@@ -30,6 +30,8 @@ export interface HttpOptions {
   agents?: string;
   /** append one JSONL line per tool call */
   audit?: string;
+  /** re-index on edits to the vault */
+  watch?: boolean;
 }
 
 /** Public origin as seen by the client, honouring the tunnel/proxy headers. */
@@ -79,6 +81,7 @@ export async function serveHttp(root: string, opts: HttpOptions): Promise<Server
     writable: opts.writable,
     gaps: opts.gaps,
     audit: opts.audit,
+    watch: opts.watch,
   });
   const pinned = opts.era ?? "auto";
 
