@@ -20,7 +20,7 @@ const slugWords = (name: string) => name.replace(/[_-]+/g, " ");
  * accumulated noise. Observed on a real vault — Italian legal texts came back
  * for the query "non spegnere i server di sviluppo".
  */
-const STOPWORDS = new Set([
+export const STOPWORDS = new Set([
   // it
   "il","lo","la","i","gli","le","un","uno","una","di","del","dello","della","dei","degli","delle",
   "a","al","allo","alla","ai","agli","alle","da","dal","dalla","in","nel","nella","nei","nelle",

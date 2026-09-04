@@ -3,6 +3,19 @@ import { z, type ZodRawShape } from "zod";
 import { neighbors, writeNote, WriteRefused } from "@manent/core";
 import { NOTE_TYPES } from "@manent/spec";
 import type { BrainContext } from "./context.js";
+import { scopeKey } from "./identity.js";
+
+/** A read of a name that a recent search by the same agent returned: that search helped. */
+function noteFollowed(ctx: BrainContext, name: string): void {
+  const searchId = ctx.follow.noteRead(ctx.identity.name, name);
+  if (searchId && ctx.gaps) {
+    try {
+      ctx.gaps.markFollowed(searchId);
+    } catch (err) {
+      console.error(`[manent] gap register update failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+}
 
 /**
  * The brain tools, defined once and independently of any protocol era.
@@ -56,7 +69,20 @@ export const BRAIN_TOOLS: BrainTool[] = [
     async run(args, ctx) {
       const query = String(args.query ?? "");
       const k = typeof args.k === "number" ? args.k : 8;
-      return text(await ctx.retriever.search(query, k));
+      const hits = await ctx.retriever.search(query, k);
+      // The register sees every search; a read that follows marks it useful.
+      // A register failure must not cost the caller its answer.
+      let searchId: string | undefined;
+      if (ctx.gaps) {
+        try {
+          const rec = await ctx.gaps.recordSearch({ query, agent: ctx.identity.name, corpus: scopeKey(ctx.identity), hits });
+          searchId = rec.searchId;
+          ctx.follow.recordSearch(ctx.identity.name, searchId, hits.map((h) => h.name));
+        } catch (err) {
+          console.error(`[manent] gap register write failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+      return text(searchId ? { searchId, query, hits } : { query, hits });
     },
   },
   {
@@ -73,6 +99,7 @@ export const BRAIN_TOOLS: BrainTool[] = [
       const name = String(args.name ?? "");
       const note = ctx.graph.nodes.get(name);
       if (!note) return { content: [{ type: "text", text: `Note not found: ${name}` }], isError: true };
+      noteFollowed(ctx, name);
       return text(`frontmatter:\n${JSON.stringify(note.frontmatter, null, 2)}\n\nbody:\n${note.body}`);
     },
   },
@@ -145,6 +172,7 @@ export const BRAIN_TOOLS: BrainTool[] = [
       const name = String(args.name ?? "");
       const note = ctx.graph.nodes.get(name);
       if (!note) return { content: [{ type: "text", text: `Note not found: ${name}` }], isError: true };
+      noteFollowed(ctx, name);
       try {
         return text(await readFile(note.path, "utf8"));
       } catch (err) {

@@ -43,7 +43,7 @@ send({
 await waitFor(() => responses.some((r) => r.id === 3));
 
 const tools = responses.find((r) => r.id === 2).result.tools.map((t) => t.name);
-const hit = JSON.parse(responses.find((r) => r.id === 3).result.content[0].text)[0];
+const hit = JSON.parse(responses.find((r) => r.id === 3).result.content[0].text).hits[0];
 console.log(`MCP probe OK — tools: [${tools.join(", ")}], search top hit: ${hit.name} (score ${hit.score})`);
 child.kill();
 process.exit(0);

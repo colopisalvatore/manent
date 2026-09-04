@@ -51,7 +51,7 @@ for (let i = 0; i < 100 && !up; i++) {
     if (r.status === 200) {
       up = true;
       const elapsed = (Date.now() - t0) / 1000;
-      const hits = JSON.parse((await r.json()).result.content[0].text);
+      const hits = JSON.parse((await r.json()).result.content[0].text).hits;
       ok(`answers within 10s of launch (${elapsed.toFixed(1)}s)`, elapsed < 10, `hits=${hits.length}`);
       ok("serves lexical results before the model is loaded", hits[0]?.via === "bm25", `via=${hits[0]?.via}`);
       break;
@@ -70,7 +70,7 @@ for (let i = 0; i < 200; i++) {
 if (stderr.includes("ranker unavailable")) {
   console.log("SKIP  dense upgrade (embedding model not installed here)");
 } else {
-  const hits = JSON.parse((await (await call()).json()).result.content[0].text);
+  const hits = JSON.parse((await (await call()).json()).result.content[0].text).hits;
   ok("upgrades to the fused ranker once warm", hits[0]?.via?.includes("dense"), `via=${hits[0]?.via}`);
 }
 

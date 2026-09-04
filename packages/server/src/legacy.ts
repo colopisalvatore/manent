@@ -3,7 +3,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { BrainContext } from "./context.js";
-import { loadBrainContext, type RetrieverName } from "./context.js";
+import { loadBrainContext, type LoadContextOptions } from "./context.js";
 import { toolsFor } from "./tools.js";
 
 /**
@@ -46,21 +46,13 @@ export async function serveLegacyHttp(
   await transport.handleRequest(req, res, body);
 }
 
-export async function createBrainServer(
-  root: string,
-  retriever?: RetrieverName,
-  model?: string,
-  writable?: boolean,
-): Promise<McpServer> {
-  return buildLegacyServer(await loadBrainContext(root, { retriever, model, writable }));
+export async function createBrainServer(root: string, opts: LoadContextOptions = {}): Promise<McpServer> {
+  return buildLegacyServer(await loadBrainContext(root, opts));
 }
 
-export async function serveStdio(
-  root: string,
-  retriever?: RetrieverName,
-  model?: string,
-  writable?: boolean,
-): Promise<void> {
-  const server = await createBrainServer(root, retriever, model, writable);
-  await server.connect(new StdioServerTransport());
+/** stdio is a local, single-user transport: the caller is the owner. */
+export async function serveStdio(root: string, opts: LoadContextOptions = {}): Promise<BrainContext> {
+  const ctx = await loadBrainContext(root, opts);
+  await buildLegacyServer(ctx).connect(new StdioServerTransport());
+  return ctx;
 }

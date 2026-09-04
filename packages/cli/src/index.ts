@@ -2,9 +2,10 @@
 import { resolve } from "node:path";
 import { Command } from "commander";
 import { formatFindings, lintVault } from "@manent/lint";
-import { serveHttp, serveStdio } from "@manent/server";
+import { serveHttp, serveStdio, type GapsOptions } from "@manent/server";
 import { initVault } from "./init.js";
 import { RETRIEVERS, runEvalCommand } from "./eval.js";
+import { runGapsCommand } from "./gaps.js";
 
 const program = new Command();
 
@@ -71,6 +72,17 @@ program
     },
   );
 
+/** The gap register is opt-in: a path, or the MANENT_GAPS environment variable. */
+function gapsFrom(opts: { gaps?: string; gapsThreshold?: string }): GapsOptions | undefined {
+  const path = opts.gaps ?? process.env.MANENT_GAPS;
+  if (!path) return undefined;
+  const threshold = opts.gapsThreshold !== undefined ? Number(opts.gapsThreshold) : undefined;
+  if (threshold !== undefined && !(threshold > 0 && threshold <= 1)) {
+    throw new Error(`--gaps-threshold must be a cosine similarity in (0, 1], got "${opts.gapsThreshold}"`);
+  }
+  return { path: resolve(path), threshold };
+}
+
 program
   .command("serve")
   .description("serve the vault over MCP — stdio by default, Streamable HTTP with --http")
@@ -86,33 +98,49 @@ program
   .option("--retriever <name>", "ranking: bm25 (default) | fused (best, needs embedding model) | dense | hybrid", "bm25")
   .option("--model <id>", "embedding model for dense/fused")
   .option("--writable", "enable the write tools (brain_write, brain_append) — off by default")
+  .option("--gaps <path>", "record every search into a gap register (sqlite file outside the vault; or env MANENT_GAPS)")
+  .option("--gaps-threshold <cosine>", "similarity above which two questions are the same gap (default 0.9)")
   .action(
     async (
       dir: string,
-      opts: { http?: string; host: string; token?: string; era: string; retriever: string; model?: string; writable?: boolean },
+      opts: {
+        http?: string;
+        host: string;
+        token?: string;
+        era: string;
+        retriever: string;
+        model?: string;
+        writable?: boolean;
+        gaps?: string;
+        gapsThreshold?: string;
+      },
     ) => {
-    const root = resolve(dir);
-    const allowed = ["bm25", "hybrid", "dense", "fused"] as const;
-    if (!allowed.includes(opts.retriever as (typeof allowed)[number])) {
-      console.error(`--retriever must be one of: ${allowed.join(", ")}`);
-      process.exitCode = 1;
-      return;
-    }
-    const retriever = opts.retriever as (typeof allowed)[number];
-    const writable = !!opts.writable;
-    if (writable) {
-      // Said out loud on purpose: an operator who did not mean this should see it.
-      console.error(`[manent] WRITABLE — brain_write and brain_append can modify ${root}`);
-    }
-    if (!opts.http) {
-      await serveStdio(root, retriever, opts.model, writable);
-      return;
-    }
-    if (!["auto", "legacy", "modern"].includes(opts.era)) {
-      console.error(`--era must be auto, legacy or modern (got "${opts.era}")`);
-      process.exitCode = 1;
-      return;
-    }
+      const root = resolve(dir);
+      const allowed = ["bm25", "hybrid", "dense", "fused"] as const;
+      if (!allowed.includes(opts.retriever as (typeof allowed)[number])) {
+        console.error(`--retriever must be one of: ${allowed.join(", ")}`);
+        process.exitCode = 1;
+        return;
+      }
+      const retriever = opts.retriever as (typeof allowed)[number];
+      const writable = !!opts.writable;
+      if (writable) {
+        // Said out loud on purpose: an operator who did not mean this should see it.
+        console.error(`[manent] WRITABLE — brain_write and brain_append can modify ${root}`);
+      }
+      const gaps = gapsFrom(opts);
+      if (gaps) console.error(`[manent] gap register: ${gaps.path}`);
+
+      if (!opts.http) {
+        const ctx = await serveStdio(root, { retriever, model: opts.model, writable, gaps });
+        for (const sig of ["SIGINT", "SIGTERM"] as const) process.on(sig, () => void ctx.close().finally(() => process.exit(0)));
+        return;
+      }
+      if (!["auto", "legacy", "modern"].includes(opts.era)) {
+        console.error(`--era must be auto, legacy or modern (got "${opts.era}")`);
+        process.exitCode = 1;
+        return;
+      }
       const token = opts.token ?? process.env.MANENT_HTTP_TOKEN ?? "";
       await serveHttp(root, {
         port: Number(opts.http),
@@ -122,7 +150,59 @@ program
         retriever,
         model: opts.model,
         writable,
+        gaps,
       });
+    },
+  );
+
+program
+  .command("gaps")
+  .description("the gap register: questions the brain could not answer, by frequency; close one with the note that answers it")
+  .argument("[dir]", "vault directory", ".")
+  .requiredOption("--gaps <path>", "sqlite file of the register (or env MANENT_GAPS)", process.env.MANENT_GAPS)
+  .option("--status <s>", "open (default) | closed | dismissed | all", "open")
+  .option("--limit <n>", "rows to show", "50")
+  .option("--json", "machine-readable output")
+  .option("--show <id>", "the searches behind one gap")
+  .option("--close <id>", "close a gap with the note that answers it (needs --note)")
+  .option("--note <name>", "canonical name of the answering note")
+  .option("--golden <file>", "also append the closing entry to this golden-set file")
+  .option("--dismiss <id>", "close a gap without a note (not a real question, or out of scope)")
+  .option("--feedback", "list feedback left by agents (brain_feedback)")
+  .action(
+    async (
+      dir: string,
+      opts: {
+        gaps: string;
+        status: string;
+        limit: string;
+        json?: boolean;
+        show?: string;
+        close?: string;
+        note?: string;
+        golden?: string;
+        dismiss?: string;
+        feedback?: boolean;
+      },
+    ) => {
+      if (!["open", "closed", "dismissed", "all"].includes(opts.status)) {
+        console.error(`--status must be open, closed, dismissed or all (got "${opts.status}")`);
+        process.exitCode = 1;
+        return;
+      }
+      const code = await runGapsCommand(resolve(dir), {
+        db: resolve(opts.gaps),
+        status: opts.status as "open" | "closed" | "dismissed" | "all",
+        limit: Number(opts.limit),
+        json: !!opts.json,
+        show: opts.show,
+        close: opts.close,
+        note: opts.note,
+        golden: opts.golden,
+        dismiss: opts.dismiss,
+        feedback: !!opts.feedback,
+      });
+      if (code !== 0) process.exitCode = code;
     },
   );
 

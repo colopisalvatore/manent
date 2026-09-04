@@ -8,6 +8,8 @@ import {
   loadLocalEmbeddingModel,
   type Retriever,
 } from "@manent/retrieval";
+import { FollowTracker, GapStore } from "./gaps.js";
+import { OWNER, type Identity } from "./identity.js";
 
 export type RetrieverName = "bm25" | "hybrid" | "dense" | "fused";
 
@@ -32,12 +34,27 @@ export interface BrainContext {
    * deliberate choice, never a default.
    */
   writable: boolean;
+  /** who is calling; the owner unless the request carried an agent credential */
+  identity: Identity;
+  /** the gap register, when the server was started with one */
+  gaps?: GapStore;
+  /** links reads back to the searches that produced them */
+  follow: FollowTracker;
   /**
    * Folds a freshly written note back into the served state, so a write is
    * visible to the very next read. Lexical ranking is rebuilt synchronously;
    * a dense index re-embeds only what changed (it caches by content hash).
    */
   applyWrite(note: Note): Promise<void>;
+  /** releases what the context holds open: the gap register, watchers */
+  close(): Promise<void>;
+}
+
+export interface GapsOptions {
+  /** sqlite file for the gap register, outside the vault */
+  path: string;
+  /** cosine similarity above which two queries count as the same gap */
+  threshold?: number;
 }
 
 export interface LoadContextOptions {
@@ -54,6 +71,8 @@ export interface LoadContextOptions {
    * service restarts on every vault sync.
    */
   warmup?: "background" | "blocking";
+  /** record every search into a gap register at this path */
+  gaps?: GapsOptions;
 }
 
 /**
@@ -77,6 +96,10 @@ export async function loadBrainContext(
   let denseModel: Awaited<ReturnType<typeof loadLocalEmbeddingModel>> | undefined;
   const lexical = () => (choice === "hybrid" ? hybridRetriever({ notes, graph: ctx.graph }) : bm25Retriever(notes));
 
+  // The register opens before serving starts: an operator who asked for it
+  // should learn now, not on the first search, if the path is unusable.
+  const gaps = opts.gaps ? await GapStore.open({ path: opts.gaps.path, threshold: opts.gaps.threshold }) : undefined;
+
   const ctx: BrainContext = {
     notes,
     graph,
@@ -84,6 +107,9 @@ export async function loadBrainContext(
     ready: Promise.resolve(),
     root,
     writable: opts.writable ?? false,
+    identity: OWNER,
+    gaps,
+    follow: new FollowTracker(),
     async applyWrite(note) {
       // Mutated in place: the retrievers close over this array.
       const at = notes.findIndex((n) => n.relPath === note.relPath);
@@ -97,6 +123,9 @@ export async function loadBrainContext(
         ctx.retriever = choice === "dense" ? denseRetriever(dense) : fusedRetriever(notes, dense);
       }
     },
+    async close() {
+      gaps?.close();
+    },
   };
   if (choice !== "dense" && choice !== "fused") return ctx;
 
@@ -107,6 +136,8 @@ export async function loadBrainContext(
       denseModel = model;
       const dense = await buildDenseIndex(notes, model, { root });
       ctx.retriever = choice === "dense" ? denseRetriever(dense) : fusedRetriever(notes, dense);
+      // Same model for the register: gaps group by meaning from here on.
+      gaps?.setEmbedder(async (text) => (await model.embed([text], "query"))[0]);
       console.error(
         `[manent] ${choice} ranker ready in ${((Date.now() - started) / 1000).toFixed(1)}s — ` +
           `${dense.notes} notes / ${dense.chunks.length} passages (${dense.embedded} notes embedded, ${dense.reused} cached)`,

@@ -1,8 +1,20 @@
 // Retrieval lives in @manent/retrieval: one implementation for the server and
 // for the eval harness, so what ships is what gets measured.
 export { bm25Retriever, hybridRetriever, buildSearchIndex, type Retriever, type Hit } from "@manent/retrieval";
-export { loadBrainContext, type BrainContext, type RetrieverName } from "./context.js";
+export { loadBrainContext, type BrainContext, type RetrieverName, type LoadContextOptions, type GapsOptions } from "./context.js";
 export { BRAIN_TOOLS, findTool, toolsFor, type BrainTool, type ToolResult } from "./tools.js";
+export { OWNER, loadAgents, identityForToken, scopeKey, type Identity, type AgentSpec } from "./identity.js";
+export {
+  GapStore,
+  FollowTracker,
+  normalizeQuery,
+  DEFAULT_GAP_THRESHOLD,
+  type GapRow,
+  type SearchRow,
+  type FeedbackRow,
+  type FeedbackVerdict,
+  type GapStoreOptions,
+} from "./gaps.js";
 
 // Legacy era — handshake revisions, served by the official SDK.
 export {

@@ -22,7 +22,8 @@
     "tune:fusion": "node scripts/tune-fusion.mjs",
     "test:warmup": "node scripts/warmup-test.mjs",
     "test:write": "node scripts/write-test.mjs",
-    "test:links": "node scripts/links-test.mjs"
+    "test:links": "node scripts/links-test.mjs",
+    "test:gaps": "node scripts/gaps-test.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",
