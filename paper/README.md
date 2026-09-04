@@ -1,7 +1,7 @@
 # Paper
 
-*Manent: File-First, Git-Versioned Memory for AI Agents — Specification, Evaluation Harness, and
-What Retrieval Ablations on Atomic Notes Show.* Preprint, September 2026.
+*Manent: File-First, Git-Versioned Memory for AI Agents. Specification, evaluation harness, and
+retrieval ablations on atomic notes.* Preprint, September 2026.
 
 - `manent-paper.html` — the source. A single HTML file with print CSS; no TeX toolchain needed.
 - `manent-paper.pdf` — rendered with headless Chrome:
