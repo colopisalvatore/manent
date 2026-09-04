@@ -12,6 +12,7 @@ const DIRS = [
   "wiki/concepts",
   "wiki/queries",
   "knowledge",
+  "quarantine",
   "secrets",
 ];
 
