@@ -87,6 +87,15 @@ console.log("\n── through the tools ──");
   ok("closed gaps leave the open list", !ctx.gaps.listGaps().some((g) => g.id === gap.id));
   const fb = ctx.gaps.addFeedback({ agent: "owner", searchId: s1.searchId, note: "cpanel-cron-wrapper", verdict: "outdated", comment: "chiama 3331234567" });
   ok("feedback resolves the gap from the search id and is redacted", fb.gapId && !fb.comment.includes("3331234567"));
+  // brain_feedback: the tool form of the same thing, with the outcome of the question.
+  const viaTool = JSON.parse((await call("brain_feedback", { verdict: "wrong", note: "cpanel-cron-wrapper", searchId: s1.searchId, outcome: "escalated", comment: "la soluzione non vale piu' su cPanel 120" })).content[0].text);
+  ok("brain_feedback records a verdict against the note and the search", viaTool.ok === true && viaTool.gapId === fb.gapId);
+  ok("outcome lands on the search row", ctx.gaps.listSearches(fb.gapId).some((s) => s.id === s1.searchId && s.outcome === "escalated"));
+  ok("the gap row counts its feedback", ctx.gaps.getGap(fb.gapId).feedback === 2);
+  ok("a verdict on an unknown note is refused", (await call("brain_feedback", { verdict: "wrong", note: "does-not-exist" })).isError === true);
+  const noStore = await loadBrainContext(vault, {});
+  ok("without a register the tool says where feedback would go", (await findTool("brain_feedback").run({ verdict: "helpful" }, noStore)).isError === true);
+  await noStore.close();
   await ctx.close();
 }
 
@@ -124,7 +133,7 @@ console.log("\n── cli ──");
   }
   ok("--close refuses a note that does not exist", refused);
   const fb = execFileSync("node", [CLI, "gaps", vault, "--gaps", db, "--feedback"], { encoding: "utf8" });
-  ok("--feedback lists feedback", fb.includes("outdated"));
+  ok("--feedback lists feedback", fb.includes("outdated") && fb.includes("wrong"));
 }
 
 await rm(root, { recursive: true, force: true });

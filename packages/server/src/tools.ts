@@ -246,6 +246,53 @@ export const BRAIN_TOOLS: BrainTool[] = [
     },
   },
   {
+    name: "brain_feedback",
+    description:
+      "Report how the brain served you: a note that was wrong, outdated or incomplete, or a search that helped. The gap register sees only what was missing — a confident wrong answer looks like a success to it — so this is the one way 'there, but wrong' gets recorded. Pass the searchId from brain_search and/or the note's name.",
+    inputSchemaJson: {
+      type: "object",
+      properties: {
+        verdict: { type: "string", enum: ["wrong", "outdated", "incomplete", "helpful"], description: "what was wrong with the answer, or that it helped" },
+        note: { type: "string", description: "canonical name of the note the verdict is about" },
+        searchId: { type: "string", description: "the searchId of the brain_search this refers to" },
+        outcome: { type: "string", enum: ["resolved", "escalated", "unanswered"], description: "how the question ended, if known" },
+        comment: { type: "string", maxLength: 500, description: "one line: what was wrong, or what was missing (no personal data)" },
+      },
+      required: ["verdict"],
+      additionalProperties: false,
+    },
+    inputSchemaZod: {
+      verdict: z.enum(["wrong", "outdated", "incomplete", "helpful"]).describe("what was wrong with the answer, or that it helped"),
+      note: z.string().optional().describe("canonical name of the note the verdict is about"),
+      searchId: z.string().optional().describe("the searchId of the brain_search this refers to"),
+      outcome: z.enum(["resolved", "escalated", "unanswered"]).optional().describe("how the question ended, if known"),
+      comment: z.string().max(500).optional().describe("one line: what was wrong, or what was missing (no personal data)"),
+    },
+    run(args, ctx) {
+      if (!ctx.gaps) return refuse("This server keeps no register (start it with --gaps), so feedback has nowhere to go.");
+      const verdict = String(args.verdict ?? "");
+      if (!["wrong", "outdated", "incomplete", "helpful"].includes(verdict)) return refuse("verdict must be wrong, outdated, incomplete or helpful");
+      const note = args.note != null ? String(args.note) : undefined;
+      // A verdict about a note the caller cannot see is either a mistake or a probe.
+      if (note && !ctx.graph.nodes.has(note)) return refuse(`Note not found: ${note}`);
+      const searchId = args.searchId != null ? String(args.searchId) : undefined;
+      const outcome = args.outcome != null ? String(args.outcome) : undefined;
+      try {
+        if (searchId && outcome) ctx.gaps.setOutcome(searchId, outcome);
+        const row = ctx.gaps.addFeedback({
+          agent: ctx.identity.name,
+          searchId,
+          note,
+          verdict: verdict as "wrong" | "outdated" | "incomplete" | "helpful",
+          comment: args.comment != null ? String(args.comment) : undefined,
+        });
+        return { ...text({ ok: true, id: row.id, gapId: row.gapId }), audit: { verdict, note, gapId: row.gapId } };
+      } catch (err) {
+        return refuse(`Feedback not recorded: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    },
+  },
+  {
     name: "brain_write",
     requiresWrite: true,
     description:

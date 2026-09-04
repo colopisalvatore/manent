@@ -42,6 +42,8 @@ export interface GapRow {
   closedAt: string | null;
   /** distinct agents that hit this gap */
   agents: string[];
+  /** feedback rows attached to this gap (brain_feedback) */
+  feedback: number;
 }
 
 export interface SearchRow {
@@ -254,7 +256,9 @@ export class GapStore {
     const where = status === "all" ? "" : "WHERE g.status = ?";
     const rows = this.db
       .prepare(
-        `SELECT g.*, (SELECT GROUP_CONCAT(DISTINCT s.agent) FROM searches s WHERE s.gap_id = g.id) AS agents
+        `SELECT g.*,
+                (SELECT GROUP_CONCAT(DISTINCT s.agent) FROM searches s WHERE s.gap_id = g.id) AS agents,
+                (SELECT COUNT(*) FROM feedback f WHERE f.gap_id = g.id) AS feedback
          FROM gaps g ${where}
          ORDER BY (g.count - g.followed) DESC, g.count DESC, COALESCE(g.top_score, 0) ASC, g.last_seen DESC
          LIMIT ?`,
@@ -265,7 +269,12 @@ export class GapStore {
 
   getGap(id: string): GapRow | undefined {
     const row = this.db
-      .prepare("SELECT g.*, (SELECT GROUP_CONCAT(DISTINCT s.agent) FROM searches s WHERE s.gap_id = g.id) AS agents FROM gaps g WHERE g.id = ?")
+      .prepare(
+        `SELECT g.*,
+                (SELECT GROUP_CONCAT(DISTINCT s.agent) FROM searches s WHERE s.gap_id = g.id) AS agents,
+                (SELECT COUNT(*) FROM feedback f WHERE f.gap_id = g.id) AS feedback
+         FROM gaps g WHERE g.id = ?`,
+      )
       .get(id) as Record<string, unknown> | undefined;
     return row ? toGapRow(row) : undefined;
   }
@@ -400,6 +409,7 @@ function toGapRow(r: Record<string, unknown>): GapRow {
     note: (r.note as string | null) ?? null,
     closedAt: (r.closed_at as string | null) ?? null,
     agents: r.agents ? String(r.agents).split(",") : [],
+    feedback: Number(r.feedback ?? 0),
   };
 }
 

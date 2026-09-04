@@ -23,15 +23,15 @@ const pad = (s: string, n: number) => (s.length >= n ? s : s + " ".repeat(n - s.
 
 function formatGaps(rows: GapRow[]): string {
   if (rows.length === 0) return "no gaps — every search was followed by a read, or the register is empty";
-  const lines = [`${pad("id", 15)} ${pad("asked", 6)} ${pad("read", 5)} ${pad("top", 6)} ${pad("last seen", 16)} ${pad("agents", 14)} query`];
+  const lines = [`${pad("id", 15)} ${pad("asked", 6)} ${pad("read", 5)} ${pad("fb", 3)} ${pad("top", 6)} ${pad("last seen", 16)} ${pad("agents", 14)} query`];
   for (const g of rows) {
     const top = g.topScore == null ? "-" : g.topScore >= 1 ? g.topScore.toFixed(1) : g.topScore.toFixed(3);
     const status = g.status === "open" ? "" : ` [${g.status}${g.note ? ` → ${g.note}` : ""}]`;
     lines.push(
-      `${pad(g.id, 15)} ${pad(String(g.count), 6)} ${pad(String(g.followed), 5)} ${pad(top, 6)} ${pad(short(g.lastSeen), 16)} ${pad(g.agents.join(",").slice(0, 14), 14)} ${g.query}${status}`,
+      `${pad(g.id, 15)} ${pad(String(g.count), 6)} ${pad(String(g.followed), 5)} ${pad(String(g.feedback), 3)} ${pad(top, 6)} ${pad(short(g.lastSeen), 16)} ${pad(g.agents.join(",").slice(0, 14), 14)} ${g.query}${status}`,
     );
   }
-  lines.push("", "asked = searches grouped here · read = searches followed by a read · top = best score seen");
+  lines.push("", "asked = searches grouped here · read = searches followed by a read · fb = feedback rows (brain_feedback) · top = best score seen");
   lines.push("close one with a note that answers it:  manent gaps <vault> --gaps <db> --close <id> --note <name>");
   return lines.join("\n");
 }

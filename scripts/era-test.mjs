@@ -17,7 +17,7 @@ const ok = (label, cond, extra = "") => {
 // magic count, so adding a tool needs one edit here, not three scattered fixes.
 // These servers start without --writable, so the write tools must NOT be
 // advertised: a read-only vault should not offer a tool that can only fail.
-const EXPECTED_TOOLS = ["brain_search", "brain_read", "brain_neighbors", "brain_list", "brain_read_raw", "brain_grep"];
+const EXPECTED_TOOLS = ["brain_search", "brain_read", "brain_neighbors", "brain_list", "brain_read_raw", "brain_grep", "brain_feedback"];
 const WRITE_TOOLS = ["brain_write", "brain_append"];
 const hasAllTools = (list) =>
   Array.isArray(list) &&
