@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@manent/core": "*",
+    "@manent/spec": "*",
     "@manent/lint": "*",
     "@manent/server": "*",
     "commander": "^12.1.0",

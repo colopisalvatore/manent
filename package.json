@@ -25,7 +25,8 @@
     "test:links": "node scripts/links-test.mjs",
     "test:gaps": "node scripts/gaps-test.mjs",
     "test:acl": "node scripts/acl-test.mjs",
-    "test:reload": "node scripts/reload-test.mjs"
+    "test:reload": "node scripts/reload-test.mjs",
+    "test:promote": "node scripts/promote-test.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",

@@ -158,7 +158,7 @@ otherwise. When they are on:
 2. **Quarantine.** An agent's write lands in the directory it was granted and nowhere else,
    stamped `status: quarantine`, `author: <agent>`, `audience: [private]`, whatever the call
    asked for. Quarantined notes rank below active ones (score halved) and are visible to the owner only,
-   who promotes them by editing status and audience: a commit with a name on it. The owner's
+   who promotes them with `manent promote` (below): a commit with a name on it. The owner's
    writes keep their folder and audience, and get `author: owner`.
 3. **Approval.** On MCP 2026-07-28 the write does not complete on the first call: it answers
    `resultType: "input_required"` with an elicitation form that shows the note, and completes
@@ -167,6 +167,43 @@ otherwise. When they are on:
    proposes, the person confirms, in the standard's own primitive. Clients that cannot ask (the
    handshake eras, clients without the elicitation capability) fall through: the owner's write
    goes straight through as before, an agent's goes to quarantine.
+
+## Promotion: the review queue
+
+Quarantine is only half a design: something has to take notes out of it, and if that something is
+three YAML edits by hand (status, audience, folder) the one that gets skipped is the audience, so
+the note either stays invisible or becomes readable by everyone. `manent promote` is the other
+half — one move, one commit message:
+
+```
+manent promote <vault>                                  # the queue: what is waiting, oldest first
+manent promote <vault> --author customer-care           # only what one agent proposed
+manent promote <vault> --note <name> --dry-run          # the whole move, nothing touched
+manent promote <vault> --note <name> --audience tech,product --to memory --commit
+```
+
+The queue prints one line per quarantined note: age in days (from `created`, or the file's mtime
+when it has none), name, author, current audience, path, description. Promotion sets
+`status: active`, sets the audience it is given (keeps the one it has when given none), moves the
+file out of `quarantine/<agent>/` when `--to` says where, stamps `updated`, and prints the commit
+message a person would have written by hand:
+
+```
+promote(cache-warmup): out of quarantine
+
+Written by tech on 2026-09-01, promoted 2026-09-05.
+status: quarantine, now active
+audience: private, now tech and product
+moved from quarantine/tech/cache-warmup.md to memory/cache-warmup.md
+```
+
+`--commit` stages exactly those paths and commits them in the vault repository; without it the
+message is printed for the person to use. What promotion never does is decide: no note leaves
+quarantine because a heuristic liked it. It refuses an unknown or ambiguous name, a note that is
+not in quarantine, a destination already taken or outside the vault, an audience label that is
+not a slug, and `private` alongside another label — `private` is the absence of an audience, not
+one more of them, and a note carrying both reads as private while being served to everybody
+holding the other label. Every refusal happens before anything is written.
 
 ## The gap register
 
@@ -370,6 +407,7 @@ npm run test:links     # wikilink resolution by name, path and file name
 npm run test:gaps      # gap register: redaction, grouping, follow, close, feedback, CLI
 npm run test:acl       # identities, visibility at load, quarantine, approval, audit
 npm run test:reload    # hot reload: add, edit, delete, bursts
+npm run test:promote   # promotion: the queue, the refusals, the move, the commit
 npm run test:warmup    # dense ranker warms up in the background
 MANENT_VAULT=<vault> npm run eval:gate   # retrieval regression gate; baselines are metrics-only files
 ```
@@ -398,11 +436,11 @@ Done, in the order it was built:
 - [x] **Vault hot reload**: watch, coalesce, re-embed only what changed
 - [x] `brain_feedback`: "there, but wrong", filed next to the question
 - [x] Lint gate for CI: `pii`, `injection`, `audience-unknown`, `--strict-content`
+- [x] **Promotion tooling**: `manent promote`: out of quarantine with status, audience, folder and
+      a commit message in one move; a review queue of quarantined notes by age and author
 
 Next, in the order it should be built:
 
-- [ ] **Promotion tooling**: `manent promote <note>`: out of quarantine with status, audience and
-      a commit message in one move; a review queue of quarantined notes by age and author
 - [ ] **Curation**: embedding-cluster dedup, contradiction detection (`contradicts` surfaced, never
       auto-resolved), Leiden communities as MOC suggestions, fed by the gap register's numbers,
       not by intuition

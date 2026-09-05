@@ -9,6 +9,9 @@
   ],
   "references": [
     {
+      "path": "../spec"
+    },
+    {
       "path": "../core"
     },
     {

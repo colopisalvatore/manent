@@ -84,6 +84,17 @@ export function resolveInVault(root: string, dir: string | undefined, filename: 
 }
 
 /**
+ * YAML parses bare dates as Date objects; written back they would become
+ * timestamps. Normalize to the YYYY-MM-DD the spec asks for. Every path that
+ * rewrites an existing note's frontmatter goes through here.
+ */
+export function datesAsStrings(fm: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(fm)) out[k] = v instanceof Date ? v.toISOString().slice(0, 10) : v;
+  return out;
+}
+
+/**
  * Creates or updates one note, frontmatter first.
  *
  * `create` (the default) never clobbers: an agent that means to add a note and
@@ -129,10 +140,7 @@ export async function writeNote(root: string, input: WriteNoteInput): Promise<Wr
   const body =
     mode === "append" && previous ? `${previous.body.replace(/\s*$/, "")}\n\n${input.body.trim()}\n` : `${input.body.trim()}\n`;
 
-  // YAML parses bare dates as Date objects; written back they would become
-  // timestamps. Normalize to the YYYY-MM-DD the spec asks for.
-  const kept: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(previous?.frontmatter ?? {})) kept[k] = v instanceof Date ? v.toISOString().slice(0, 10) : v;
+  const kept = datesAsStrings((previous?.frontmatter ?? {}) as Record<string, unknown>);
   const today = new Date().toISOString().slice(0, 10);
   const frontmatter: Record<string, unknown> = {
     ...kept,

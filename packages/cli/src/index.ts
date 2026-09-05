@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 import { resolve } from "node:path";
 import { Command } from "commander";
+import { NOTE_STATUSES, type NoteStatus } from "@manent/spec";
 import { formatFindings, lintVault } from "@manent/lint";
 import { serveHttp, serveStdio, type GapsOptions } from "@manent/server";
 import { initVault } from "./init.js";
 import { RETRIEVERS, runEvalCommand } from "./eval.js";
 import { runGapsCommand } from "./gaps.js";
+import { runPromoteCommand } from "./promote.js";
 
 const program = new Command();
 
@@ -221,6 +223,54 @@ program
         golden: opts.golden,
         dismiss: opts.dismiss,
         feedback: !!opts.feedback,
+      });
+      if (code !== 0) process.exitCode = code;
+    },
+  );
+
+program
+  .command("promote")
+  .description("the review queue of quarantined notes, and the one move that takes a note out: status, audience, folder, commit message")
+  .argument("[dir]", "vault directory", ".")
+  .option("--note <name>", "the note to promote; without it, the queue is printed")
+  .option("--author <agent>", "queue filter: only what this identity wrote")
+  .option("--status <s>", "status the note takes (default active)", "active")
+  .option("--audience <labels>", "comma-separated audience labels the note takes; unset keeps the ones it has")
+  .option("--to <dir>", "vault-relative directory to move the note to (out of quarantine/)")
+  .option("--dry-run", "work out the move and the message, touch nothing")
+  .option("--commit", "stage the note and commit it in the vault repository")
+  .option("--limit <n>", "queue rows to show")
+  .option("--json", "machine-readable output")
+  .action(
+    async (
+      dir: string,
+      opts: {
+        note?: string;
+        author?: string;
+        status: string;
+        audience?: string;
+        to?: string;
+        dryRun?: boolean;
+        commit?: boolean;
+        limit?: string;
+        json?: boolean;
+      },
+    ) => {
+      if (!NOTE_STATUSES.includes(opts.status as NoteStatus)) {
+        console.error(`--status must be one of: ${NOTE_STATUSES.join(", ")}`);
+        process.exitCode = 1;
+        return;
+      }
+      const code = await runPromoteCommand(resolve(dir), {
+        note: opts.note,
+        author: opts.author,
+        status: opts.status as NoteStatus,
+        audience: opts.audience,
+        to: opts.to,
+        dryRun: !!opts.dryRun,
+        commit: !!opts.commit,
+        limit: opts.limit !== undefined ? Number(opts.limit) : undefined,
+        json: !!opts.json,
       });
       if (code !== 0) process.exitCode = code;
     },
