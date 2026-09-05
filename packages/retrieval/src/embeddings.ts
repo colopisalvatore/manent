@@ -40,7 +40,12 @@ export async function loadLocalEmbeddingModel(opts: LocalModelOptions = {}): Pro
 
   let pipeline: unknown;
   try {
-    ({ pipeline } = (await import("@huggingface/transformers")) as { pipeline: unknown });
+    // The specifier is a variable on purpose: an optional dependency must not
+    // be a compile-time requirement, and a literal here makes `tsc` demand the
+    // package's types — so a build without it (CI, `npm ci --omit=optional`)
+    // fails on a dependency the default ranker never loads.
+    const specifier: string = "@huggingface/transformers";
+    ({ pipeline } = (await import(specifier)) as { pipeline: unknown });
   } catch {
     throw new Error(MISSING_DEP);
   }
