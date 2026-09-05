@@ -1,21 +1,32 @@
 // End-to-end OAuth 2.1 flow test against the local Manent HTTP server.
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 const TOKEN = "test-master-token-abcdefgh";
 const PORT = 3941;
 const BASE = `http://127.0.0.1:${PORT}`;
 
-const child = spawn(
-  "node",
-  ["<repo>/packages/cli/dist/index.js", "serve", "<repo>/.smoke-vault", "--http", String(PORT), "--token", TOKEN],
-  { stdio: ["ignore", "pipe", "inherit"], env: { ...process.env } },
-);
+// Paths are derived from this file: an absolute one works on the machine it was
+// written on and nowhere else, CI included.
+const cli = fileURLToPath(new URL("../packages/cli/dist/index.js", import.meta.url));
+const vault = fileURLToPath(new URL("../.smoke-vault", import.meta.url));
+if (!existsSync(vault)) spawnSync("node", [cli, "init", vault], { stdio: "inherit" });
+
+const child = spawn("node", [cli, "serve", vault, "--http", String(PORT), "--token", TOKEN], {
+  stdio: ["ignore", "pipe", "inherit"],
+  env: { ...process.env },
+});
 child.stdout.on("data", () => {});
 await new Promise((r) => setTimeout(r, 2500));
 
 const b64url = (b) => Buffer.from(b).toString("base64url");
-const ok = (label, cond, extra = "") => console.log(`${cond ? "PASS" : "FAIL"}  ${label}${extra ? "  " + extra : ""}`);
+let failures = 0;
+const ok = (label, cond, extra = "") => {
+  if (!cond) failures++;
+  console.log(`${cond ? "PASS" : "FAIL"}  ${label}${extra ? "  " + extra : ""}`);
+};
 
 try {
   // 1. protected resource metadata
@@ -118,3 +129,7 @@ try {
 } finally {
   child.kill();
 }
+
+// A logged FAIL has to fail the run: the whole point of the suite in CI.
+console.log(failures === 0 ? "\nall oauth tests passed" : `\n${failures} FAILURES`);
+process.exitCode = failures === 0 ? 0 : 1;
