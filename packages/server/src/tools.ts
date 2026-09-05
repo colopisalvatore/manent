@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { z, type ZodRawShape } from "zod";
 import { neighbors, redactPii, scanInjection, scanPii, writeNote, WriteRefused, type WriteMode } from "@manent/core";
 import { AUDIENCE_PRIVATE, NOTE_TYPES, SLUG_RE } from "@manent/spec";
+import { communities, contradictions, duplicates } from "@manent/curate";
 import type { BrainContext } from "./context.js";
 import { scopeKey } from "./identity.js";
 
@@ -45,6 +46,12 @@ export interface BrainTool {
   description: string;
   /** listed only on a writable server — a read-only vault should not advertise it */
   requiresWrite?: boolean;
+  /**
+   * The work grows with the whole vault rather than with the query, so on the
+   * modern path a client that speaks the tasks extension gets a task handle
+   * instead of a held-open connection. Everywhere else it runs inline.
+   */
+  longRunning?: boolean;
   /** JSON Schema 2020-12 — the modern path serves this verbatim */
   inputSchemaJson: Record<string, unknown>;
   /** same contract expressed for the SDK's Zod-based registration */
@@ -343,6 +350,52 @@ export const BRAIN_TOOLS: BrainTool[] = [
       dir: z.string().optional().describe("vault-relative folder the note lives in (owner only)"),
     },
     run: (args, ctx, call) => runWrite(ctx, { ...args, mode: "append" }, call),
+  },
+  {
+    name: "brain_curate",
+    longRunning: true,
+    description:
+      "What the vault has accumulated: near-duplicate notes, declared contradictions, and the link communities that have no map of content. Reports only — nothing is merged, resolved or written. Comparison is lexical here; the dense comparison lives in the `manent curate --dense` CLI, where building the index is an explicit step.",
+    inputSchemaJson: {
+      type: "object",
+      properties: {
+        reports: {
+          type: "array",
+          items: { enum: ["duplicates", "contradictions", "communities"] },
+          description: "which reports to run; all three by default",
+        },
+        threshold: { type: "number", minimum: 0, maximum: 1, description: "similarity at or above which two notes are a pair (default 0.25)" },
+        minSize: { type: "integer", minimum: 2, description: "smallest group the community report calls a subject (default 4)" },
+        limit: { type: "integer", minimum: 1, maximum: 200, description: "max duplicate pairs to return" },
+      },
+      additionalProperties: false,
+    },
+    inputSchemaZod: {
+      reports: z.array(z.enum(["duplicates", "contradictions", "communities"])).optional().describe("which reports to run; all three by default"),
+      threshold: z.number().min(0).max(1).optional(),
+      minSize: z.number().int().min(2).optional(),
+      limit: z.number().int().min(1).max(200).optional(),
+    },
+    run(args, ctx) {
+      const asked = Array.isArray(args.reports) ? args.reports.map(String) : ["duplicates", "contradictions", "communities"];
+      const wants = (r: string) => asked.includes(r);
+      const out: Record<string, unknown> = { notes: ctx.notes.length };
+      // The caller's own view: an agent curates what it may read, and a pair
+      // it cannot see is not a pair it is told about.
+      if (wants("duplicates")) {
+        out.duplicates = duplicates(ctx.notes, {
+          threshold: typeof args.threshold === "number" ? args.threshold : undefined,
+          limit: typeof args.limit === "number" ? args.limit : 50,
+        });
+      }
+      if (wants("contradictions")) out.contradictions = contradictions(ctx.notes);
+      if (wants("communities")) {
+        out.communities = communities(ctx.notes, {
+          minSize: typeof args.minSize === "number" ? args.minSize : undefined,
+        });
+      }
+      return text(out);
+    },
   },
 ];
 

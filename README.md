@@ -96,6 +96,7 @@ replay, forged token and disallowed redirect.
 | `brain_neighbors` | the notes linked to a note, up to 3 hops |
 | `brain_list` / `brain_grep` | enumerate, or regex over bodies |
 | `brain_feedback` | "this answer was wrong / outdated / incomplete / helpful"; see [The gap register](#the-gap-register) |
+| `brain_curate` | near-duplicates, contradictions and unmapped communities over the whole vault; comes back as a task on the modern path, see [Long-running calls](#long-running-calls-the-tasks-extension) |
 | `brain_write` / `brain_append` | listed only with `--writable`; gated, stamped, approved; see [Writes](#writes-the-gate-quarantine-and-approval) |
 
 Every tool runs on the caller's **view** of the vault. That is the whole access model, and it is
@@ -434,6 +435,38 @@ warnings for a person and, with `--strict-content`, errors for a pipeline. Run t
 a pre-commit hook or in CI on the brain repository: a note that fails it never lands in the
 shared branch, which is the only place the server reads from.
 
+## Long-running calls: the tasks extension
+
+Every brain tool answers in milliseconds except the one that reads the whole vault at once:
+`brain_curate` compares every note against every other, so its cost grows with the vault and not
+with the question. A vault of a few hundred notes finishes in a second; a few thousand does not,
+and no client holds a request open that long.
+
+So on the modern path Manent implements `io.modelcontextprotocol/tasks` (SEP-2663). A client that
+declares the extension in `_meta`:
+
+```json
+{ "io.modelcontextprotocol/clientCapabilities": { "extensions": { "io.modelcontextprotocol/tasks": {} } } }
+```
+
+gets a handle instead of a held connection — `{"resultType": "task", "taskId": …, "status": "working",
+"ttlMs": …, "pollIntervalMs": …}` — and polls `tasks/get` until the status is terminal, at which
+point the task carries the same result the inline call would have returned. `tasks/cancel` ends one;
+`tasks/update` exists and says plainly that it does not apply here, because this server's only
+question — confirming a write — is answered on the call itself. A client that declares nothing waits
+for the answer exactly as before: the extension is an option the client takes, not a change to the
+contract.
+
+Three properties, all tested in `npm run test:tasks`:
+
+- **A task belongs to the identity that created it.** Another identity asking is told it does not
+  exist. That is the same reason the extension has no `tasks/list`: without a session there is no
+  safe way to enumerate what someone else started.
+- **A task runs on its creator's view of the vault.** An agent curating sees only the notes its
+  audience allows, so a duplicate pair it may not read is not a pair it is told about.
+- **Cancellation is cooperative and never invents a result.** A task that had already finished stays
+  finished, and work that completes after a cancel does not resurrect it.
+
 ## Protocol eras
 
 MCP revision `2026-07-28` removed the `initialize` handshake and sessions; every shipping client
@@ -490,6 +523,7 @@ npm run test:acl       # identities, visibility at load, quarantine, approval, a
 npm run test:reload    # hot reload: add, edit, delete, bursts
 npm run test:promote   # promotion: the queue, the refusals, the move, the commit
 npm run test:curate    # curation: duplicates, contradictions, communities, and the vault it must not touch
+npm run test:tasks     # tasks extension: handle, polling, ownership, cancel, ttl
 npm run test:warmup    # dense ranker warms up in the background
 npm run lint:fixture   # the lint gate on eval/fixture-vault, content rules strict
 npm run eval:fixture   # retrieval regression gate on eval/fixture-vault
@@ -537,12 +571,13 @@ Done, in the order it was built:
       a real vault; contradictions surfaced (declared, one-sided, a superseded note left active);
       link communities with the maps of content they are missing, ordered by the gap register's
       numbers. Reported, never resolved
+- [x] **Tasks extension** (`io.modelcontextprotocol/tasks`, SEP-2663) on the modern path: a call whose
+      cost grows with the vault comes back as a task to poll, owned by the identity that started it
 
 Next, in the order it should be built:
 
 - [ ] npm publish (the packages carry their publish metadata and the CLI is named `manent`; the
       release itself is a person's gesture, with their own token)
-- [ ] Tasks extension (`io.modelcontextprotocol/tasks`) on the modern path, for long-running skills
 - [ ] MCP Apps (`ui://`): skill launcher, quarantine review queue, gap register, graph explorer
 - [ ] MCP spec 2026-07-28 wire upgrade on the legacy path, when the official SDK ships it
 

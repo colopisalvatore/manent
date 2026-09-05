@@ -16,6 +16,16 @@ export {
   type GapStoreOptions,
 } from "./gaps.js";
 export { AuditLog, type AuditEntry } from "./audit.js";
+export {
+  TaskStore,
+  TASKS_EXTENSION,
+  DEFAULT_TASK_TTL_MS,
+  DEFAULT_POLL_INTERVAL_MS,
+  type TaskStatus,
+  type TaskView,
+  type TaskSignal,
+  type TaskStoreOptions,
+} from "./tasks.js";
 export { watchVault, type VaultWatcher, type WatchOptions } from "./watch.js";
 
 // Legacy era — handshake revisions, served by the official SDK.

@@ -1,4 +1,5 @@
 import type { BrainContext } from "./context.js";
+import { TASKS_EXTENSION } from "./tasks.js";
 import { callTool, findTool, toolsFor, type CallContext } from "./tools.js";
 
 /**
@@ -23,6 +24,14 @@ const SERVER_INFO_KEY = "io.modelcontextprotocol/serverInfo";
 const UNSUPPORTED_PROTOCOL_VERSION = -32022;
 const METHOD_NOT_FOUND = -32601;
 const INVALID_PARAMS = -32602;
+
+/** Whether this request's client said it speaks the tasks extension. */
+function clientDoesTasks(body: Record<string, unknown>): boolean {
+  const caps = requestMeta(body)[CLIENT_CAPABILITIES_KEY];
+  if (!caps || typeof caps !== "object") return false;
+  const extensions = (caps as Record<string, unknown>).extensions;
+  return !!extensions && typeof extensions === "object" && TASKS_EXTENSION in (extensions as Record<string, unknown>);
+}
 
 const LIST_TTL_MS = 300_000;
 
@@ -105,10 +114,11 @@ export async function handleModernRequest(
         id,
         result: withMeta({
           supportedVersions: [...MODERN_VERSIONS],
-          capabilities: { tools: {} },
+          capabilities: { tools: {}, extensions: { [TASKS_EXTENSION]: {} } },
           instructions:
             "File-first memory vault. Search with brain_search, open a note with brain_read, walk its links with brain_neighbors. " +
-            "Writes, where allowed, ask the person to confirm and land in quarantine for agents.",
+            "Writes, where allowed, ask the person to confirm and land in quarantine for agents. " +
+            "brain_curate reads the whole vault at once: declare the tasks extension and it comes back as a task to poll.",
           ttlMs: LIST_TTL_MS,
           cacheScope: "private",
         }),
@@ -129,10 +139,44 @@ export async function handleModernRequest(
         }),
       };
 
+    case "tasks/get": {
+      const taskId = String(((b.params ?? {}) as Record<string, unknown>).taskId ?? "");
+      const task = ctx.tasks.get(ctx.identity.name, taskId);
+      // A task another identity created does not exist as far as this one is
+      // told: the extension dropped `tasks/list` for the same reason.
+      if (!task) return { jsonrpc: "2.0", id, error: { code: INVALID_PARAMS, message: `Task not found: ${taskId}` } };
+      return { jsonrpc: "2.0", id, result: { ...task, _meta: { [SERVER_INFO_KEY]: SERVER_INFO } } };
+    }
+
+    case "tasks/cancel": {
+      const taskId = String(((b.params ?? {}) as Record<string, unknown>).taskId ?? "");
+      const task = ctx.tasks.cancel(ctx.identity.name, taskId);
+      if (!task) return { jsonrpc: "2.0", id, error: { code: INVALID_PARAMS, message: `Task not found: ${taskId}` } };
+      return { jsonrpc: "2.0", id, result: { _meta: { [SERVER_INFO_KEY]: SERVER_INFO } } };
+    }
+
+    case "tasks/update": {
+      const taskId = String(((b.params ?? {}) as Record<string, unknown>).taskId ?? "");
+      const updated = ctx.tasks.update(ctx.identity.name, taskId);
+      if (updated.ok) return { jsonrpc: "2.0", id, result: { _meta: { [SERVER_INFO_KEY]: SERVER_INFO } } };
+      return {
+        jsonrpc: "2.0",
+        id,
+        error: {
+          code: INVALID_PARAMS,
+          message:
+            updated.reason === "not-found"
+              ? `Task not found: ${taskId}`
+              : `Task ${taskId} is not waiting for input: this server's only question, confirming a write, is answered on the call itself`,
+        },
+      };
+    }
+
     case "tools/call": {
       const params = (b.params ?? {}) as Record<string, unknown>;
       const name = String(params.name ?? "");
-      if (!findTool(name)) {
+      const tool = findTool(name);
+      if (!tool) {
         return { jsonrpc: "2.0", id, error: { code: INVALID_PARAMS, message: `Unknown tool: ${name}` } };
       }
       const args = (params.arguments ?? {}) as Record<string, unknown>;
@@ -142,6 +186,23 @@ export async function handleModernRequest(
         requestState: typeof params.requestState === "string" ? params.requestState : undefined,
         clientCapabilities: caps && typeof caps === "object" ? (caps as Record<string, unknown>) : undefined,
       };
+
+      // Work measured in the size of the vault, not of the query, goes back as
+      // a handle when the client can hold one. A client that cannot simply
+      // waits, exactly as before.
+      if (tool.longRunning && clientDoesTasks(b)) {
+        const task = ctx.tasks.create(
+          ctx.identity.name,
+          () => callTool(name, args, ctx, call),
+          `${name} is reading ${ctx.notes.length} notes`,
+        );
+        return {
+          jsonrpc: "2.0",
+          id,
+          result: { resultType: "task", ...task, _meta: { [SERVER_INFO_KEY]: SERVER_INFO } },
+        };
+      }
+
       const out = await callTool(name, args, ctx, call);
       if (out.inputRequired) {
         return {
