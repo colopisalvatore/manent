@@ -59,7 +59,11 @@ const PII_PATTERNS: PiiPattern[] = [
   { kind: "iban", re: /\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]){11,30}\b/g },
   // Italian codice fiscale: 6 letters, 2 digits, month letter, 2 digits, letter, 3 digits, letter.
   { kind: "fiscal-code", re: /\b[A-Z]{6}\d{2}[ABCDEHLMPRST]\d{2}[A-Z]\d{3}[A-Z]\b/gi },
-  { kind: "card", re: /\b(?:\d[ -]?){12,18}\d\b/g, accept: luhn },
+  // The lookbehind keeps a decimal out of it: `0.9449152542372882` is a metric,
+  // and a digit run that passes Luhn by chance is exactly what a scorecard full
+  // of them will do. A card in prose is preceded by a space or nothing, never
+  // by a decimal separator.
+  { kind: "card", re: /(?<![.,\d])(?:\d[ -]?){12,18}\d\b/g, accept: luhn },
   // International form: +39 333 123 4567, +1 (415) 555-0123.
   { kind: "phone", re: /\+\d{1,3}[ .-]?(?:\(?\d{1,4}\)?[ .-]?){1,3}\d{3,4}/g, accept: (m) => digitsOf(m).length >= 9 && digitsOf(m).length <= 15 },
   // Italian national form: mobiles start with 3, landlines with 0; needs a separator or the bare 10 digits.

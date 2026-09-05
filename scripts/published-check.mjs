@@ -80,9 +80,6 @@ const PII_ALLOWED = new Set([
 const pii = [...text]
   .filter(([f]) => !PII_ALLOWED.has(f))
   .map(([f, t]) => [f, scanPii(t)])
-  // A metric like 0.9449152542372882 reads as a card number to the scanner:
-  // a digit run inside a decimal is not personal data.
-  .map(([f, found]) => [f, found.filter((x) => !(x.kind === "card" && /^eval\/baseline-/.test(f)))])
   .filter(([, found]) => found.length > 0);
 ok(
   "no personal data outside the files that exist to test for it",
