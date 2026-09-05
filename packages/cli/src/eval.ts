@@ -14,7 +14,10 @@ import {
   compareReports,
   deriveAutoQueries,
   formatReport,
+  isAlias,
+  isPseudonymous,
   loadGoldenSet,
+  resolveAliases,
   runEval,
   type EvalQuery,
   type EvalReport,
@@ -47,9 +50,18 @@ export async function runEvalCommand(root: string, opts: EvalCliOptions): Promis
 
   const queries: EvalQuery[] = [];
   if (opts.golden) {
-    const set = await loadGoldenSet(opts.golden);
+    // A published set names its notes by hash; they resolve here, against the
+    // vault that has them, so the rest of the run sees ordinary names.
+    const published = await loadGoldenSet(opts.golden);
+    const set = resolveAliases(published, notes);
     queries.push(...set.queries);
-    console.log(`golden set "${set.name}": ${set.queries.length} hand-written queries`);
+    const unresolved = set.queries.flatMap((q) => q.expected.filter(isAlias)).length;
+    console.log(
+      `golden set "${set.name}": ${set.queries.length} hand-written queries` +
+        (isPseudonymous(published)
+          ? ` (published by hash; ${unresolved > 0 ? `${unresolved} not in this vault` : "all resolved against this vault"})`
+          : ""),
+    );
   }
   if (opts.auto) {
     const auto = deriveAutoQueries(notes);

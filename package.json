@@ -20,6 +20,7 @@
     "eval": "node scripts/eval-vault.mjs --golden eval/golden-aios.json",
     "eval:gate": "node scripts/eval-vault.mjs --golden eval/golden-aios.json --retriever bm25 --baseline eval/baseline-bm25.json",
     "lint:fixture": "node packages/cli/dist/index.js lint eval/fixture-vault --strict-content --strict-links --audiences tech,product",
+    "check:published": "node scripts/published-check.mjs",
     "eval:fixture": "node packages/cli/dist/index.js eval eval/fixture-vault --golden eval/golden-fixture.json --retriever bm25 --baseline eval/baseline-fixture-bm25.json",
     "tune": "node scripts/tune-retrieval.mjs",
     "eval:fused": "node scripts/eval-vault.mjs --golden eval/golden-aios.json --retriever fused",

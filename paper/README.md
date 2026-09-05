@@ -16,7 +16,16 @@ retrieval ablations on atomic notes.* Preprint, September 2026.
 ## Reproducing the numbers
 
 The corpus is a private vault (479 Markdown notes, Italian, personal and work knowledge) and is
-not distributed; the golden set that names its notes is in `eval/golden-aios.json`. Every script
+not distributed. The queries asked of it are in `eval/golden-aios.json`, with the notes they expect
+**named by hash** (`note:<sha256 truncated>`): publishing an index of a private archive would say
+more about the vault than the measurement needs. The aliases resolve against the vault that holds
+those notes and nowhere else, so the run and its miss list read normally there.
+
+`paper/results/` holds the raw outputs the tables were transcribed from, except Table 2's: that run
+was not captured (the file kept in its place was the trace of a failed invocation and has been
+removed). The command is listed below and reproduces it.
+
+Every script
 takes a vault path and a golden set path, so the same measurements run on any spec-conforming
 vault:
 

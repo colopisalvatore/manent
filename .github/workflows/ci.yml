@@ -46,6 +46,8 @@ jobs:
 
       # The vault the gate runs on is `eval/fixture-vault`: invented notes, so
       # the corpus can be public. Nobody's real brain ever reaches CI.
+      - name: nothing here says more about a private vault than it should
+        run: npm run check:published
       - name: lint gate on the fixture vault
         run: npm run lint:fixture
       - name: retrieval regression gate on the fixture vault

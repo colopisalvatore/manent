@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { noteName, type Note } from "@manent/core";
 
@@ -32,6 +33,54 @@ export async function loadGoldenSet(path: string): Promise<GoldenSet> {
     q.source ??= "curated";
   }
   return raw;
+}
+
+/**
+ * Pseudonymous expected notes.
+ *
+ * A golden set is written against a real vault, so its `expected` names are a
+ * list of what that vault holds — publishable only if the vault is. Writing
+ * `note:<hash>` instead keeps the set publishable: the queries and the split
+ * between them are the measurement, and they stay readable, while the names
+ * resolve only for whoever already has the notes.
+ *
+ * Resolution happens against the loaded vault, so everything downstream — the
+ * metrics, the miss list — keeps working with real names. An alias no note
+ * matches stays unresolved and scores as a miss, which is the honest outcome:
+ * a golden entry pointing at a note this vault does not have was never going
+ * to be found.
+ */
+export const ALIAS_PREFIX = "note:";
+const ALIAS_RE = /^note:[0-9a-f]{12}$/;
+
+/** The published form of a note name. Stable, one-way, short enough to read. */
+export const noteAlias = (name: string): string =>
+  ALIAS_PREFIX + createHash("sha256").update(name, "utf8").digest("hex").slice(0, 12);
+
+export const isAlias = (value: string): boolean => ALIAS_RE.test(value);
+
+/** True when a set was published pseudonymously: at least one expected entry is an alias. */
+export const isPseudonymous = (set: GoldenSet): boolean =>
+  set.queries.some((q) => q.expected.some(isAlias));
+
+/**
+ * Turns `note:<hash>` entries back into the names of the notes in this vault.
+ * A set with no aliases comes back untouched.
+ */
+export function resolveAliases(set: GoldenSet, notes: Note[]): GoldenSet {
+  if (!isPseudonymous(set)) return set;
+  const byAlias = new Map<string, string>();
+  for (const n of notes) {
+    const name = noteName(n);
+    byAlias.set(noteAlias(name), name);
+  }
+  return {
+    ...set,
+    queries: set.queries.map((q) => ({
+      ...q,
+      expected: q.expected.map((e) => (isAlias(e) ? (byAlias.get(e) ?? e) : e)),
+    })),
+  };
 }
 
 const STOP = new Set([

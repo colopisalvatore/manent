@@ -570,8 +570,16 @@ npm run test:apps      # MCP Apps: declaration, linkage, self-contained pages, t
 npm run test:warmup    # dense ranker warms up in the background
 npm run lint:fixture   # the lint gate on eval/fixture-vault, content rules strict
 npm run eval:fixture   # retrieval regression gate on eval/fixture-vault
+npm run check:published # nothing tracked here names a private note, a disk or a credential
 MANENT_VAULT=<vault> npm run eval:gate   # the same gate on your own vault; baselines are metrics-only files
 ```
+
+A golden set is written against a real vault, so the names it expects are an index of what that
+vault holds. `eval/golden-aios.json` therefore publishes them **by hash** (`note:<sha256 truncated>`):
+the queries stay readable, because they are the measurement, and the names resolve only against the
+vault that has those notes — where the run and its miss list read exactly as before. `npm run
+check:published` holds the line in CI: no private note name, no absolute path from anyone's disk, no
+credential, and no personal data outside the few files that exist to test for it.
 
 CI (`.github/workflows/ci.yml`) runs all of it on node 20 and 22 except `test:warmup`, which would
 download the embedding model, and `npm pack --dry-run` on every package, so a release ships what it
