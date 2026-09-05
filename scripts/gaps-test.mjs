@@ -10,6 +10,16 @@ import { loadBrainContext } from "../packages/server/dist/context.js";
 import { findTool } from "../packages/server/dist/tools.js";
 import { GapStore, FollowTracker, normalizeQuery } from "../packages/server/dist/gaps.js";
 
+// The register is stored in `node:sqlite`, which arrived in Node 22.5. On an
+// older runtime the feature does not exist, so neither does its test: skipping
+// is the honest outcome, and failing would only say what the README says.
+try {
+  await import("node:sqlite");
+} catch {
+  console.log(`skipped: the gap register needs node:sqlite (Node >= 22.5), this is ${process.version}`);
+  process.exit(0);
+}
+
 let failures = 0;
 const ok = (label, cond, extra = "") => {
   if (!cond) failures++;

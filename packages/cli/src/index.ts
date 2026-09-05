@@ -283,6 +283,9 @@ program
   .argument("[dir]", "vault directory", ".")
   .option("--duplicates", "only the near-duplicate report")
   .option("--contradictions", "only the contradiction report")
+  .option("--communities", "only the community report: what the links group together, and which group has no map")
+  .option("--min-size <n>", "smallest group the community report calls a subject (default 4)")
+  .option("--gaps <path>", "gap register: ranks communities by the questions they failed to answer (or env MANENT_GAPS)")
   .option("--dense", "compare notes by meaning (needs the embedding model) instead of by shared words")
   .option("--model <id>", "embedding model for --dense")
   .option("--threshold <n>", "similarity at or above which a pair is reported (dense 0.94, lexical 0.35)")
@@ -295,6 +298,9 @@ program
       opts: {
         duplicates?: boolean;
         contradictions?: boolean;
+        communities?: boolean;
+        minSize?: string;
+        gaps?: string;
         dense?: boolean;
         model?: string;
         threshold?: string;
@@ -312,6 +318,9 @@ program
       const code = await runCurateCommand(resolve(dir), {
         duplicates: !!opts.duplicates,
         contradictions: !!opts.contradictions,
+        communities: !!opts.communities,
+        minSize: opts.minSize !== undefined ? Number(opts.minSize) : undefined,
+        gaps: opts.gaps ?? process.env.MANENT_GAPS,
         dense: !!opts.dense,
         model: opts.model,
         threshold,

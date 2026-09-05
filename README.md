@@ -25,7 +25,7 @@ Agent memory today is either a proprietary vector-DB dump (lock-in, no audit tra
 | `@manent/retrieval` | Ranking: BM25 lexical, local dense embeddings, graph expansion, RRF fusion, status demotion |
 | `@manent/eval` | Eval harness: golden sets, recall@k / MRR / nDCG, regression gate |
 | `@manent/lint` | Rule engine: schema, links, duplicates, orphans, personal data, model-directed text, audience labels |
-| `@manent/curate` | Curation: near-duplicate pairs (lexical or dense) and declared contradictions, reported for a person |
+| `@manent/curate` | Curation: near-duplicate pairs, declared contradictions, link communities and the maps of content they lack |
 | `@manent/server` | MCP server over a vault: read tools, gated write tools, gap register, identities, audit, hot reload; see [Protocol eras](#protocol-eras) |
 | `manent` | The CLI: `init | lint | eval | serve | gaps | promote | curate` |
 
@@ -213,8 +213,9 @@ two notes that disagree. Both cost the reader, and both are judgements about mea
 `manent curate` reports and never resolves.
 
 ```
-manent curate <vault>                          # both reports
-manent curate <vault> --duplicates --dense     # by meaning, not by shared words
+manent curate <vault>                                  # all three reports
+manent curate <vault> --duplicates --dense             # by meaning, not by shared words
+manent curate <vault> --communities --gaps gaps.sqlite # groups without a map, by demand
 manent curate <vault> --contradictions --json
 ```
 
@@ -237,6 +238,32 @@ The dense numbers say something worth saying out loud: this model puts everythin
 about one job in a narrow band, so at those scores the dense list is **topic twins** — a handoff and
 the retro of the same day, a project note and its retro — while the lexical list is where the actual
 copies are. Read them as two different questions.
+
+**Communities, and the maps that are missing.** A vault's folders are one taxonomy, chosen once;
+its links are another, made a note at a time by whoever was writing, and it is the honest one.
+`--communities` finds the groups the links form (Louvain modularity optimisation, plus the guarantee
+that motivated Leiden: a community whose subgraph is disconnected is split into its components) and
+says which of them already has a map of content, so the ones without are where writing one would
+pay. Nothing is random and node order is fixed: two runs give the same answer, because a suggestion
+that moves between runs is one nobody can act on.
+
+Two things had to be measured rather than assumed:
+
+- **Index and MOC notes are held out of the graph.** An index links every note by design. Leaving
+  it in gave one community of 437 notes and a modularity of 0.000 on the reference vault. Held out,
+  the same vault yields **15 communities, modularity 0.775**, and the maps come back at the end to
+  say which community is covered.
+- **What "covered" means.** A real MOC links a small share of a community — 12 members out of 45 in
+  the best case here — so "covers a third of it" reports nothing. What separates a map of a subject
+  from a general one is where *its own* links land: a MOC belongs to the community holding most of
+  them, provided that is at least a quarter of what it links. The vault's personal MOC, 22 links
+  spread over five communities at four apiece, is a map of none of them. On the reference vault
+  that leaves **10 of 15 communities with no map** — the work list.
+
+With `--gaps <register>` the report is ordered by demand instead of size: each community carries the
+number of open gaps whose best answers landed inside it, so the suggestion at the top is the subject
+people ask about and the vault fails to answer. That is the roadmap's "fed by the gap register's
+numbers, not by intuition", and it is the difference between a clustering toy and a work list.
 
 **Contradictions.** Only what is checkable without understanding the notes: a pair where both
 declare `contradicts` (a work item until one is deprecated or a note reconciles them); a one-sided
@@ -462,7 +489,7 @@ npm run test:gaps      # gap register: redaction, grouping, follow, close, feedb
 npm run test:acl       # identities, visibility at load, quarantine, approval, audit
 npm run test:reload    # hot reload: add, edit, delete, bursts
 npm run test:promote   # promotion: the queue, the refusals, the move, the commit
-npm run test:curate    # curation: duplicates, contradictions, and the vault it must not touch
+npm run test:curate    # curation: duplicates, contradictions, communities, and the vault it must not touch
 npm run test:warmup    # dense ranker warms up in the background
 npm run lint:fixture   # the lint gate on eval/fixture-vault, content rules strict
 npm run eval:fixture   # retrieval regression gate on eval/fixture-vault
@@ -507,15 +534,14 @@ Done, in the order it was built:
 - [x] **Git-backed deploy recipe** (`deploy/`): the lint gate as a `pre-receive` hook, checkout on
       `post-receive` with no restart, systemd unit, identities and audit paths as a server layout
 - [x] **Curation** (`manent curate`): near-duplicate pairs, lexical or dense, thresholds measured on
-      a real vault; contradictions surfaced (declared, one-sided, a superseded note left active).
-      Reported, never resolved
+      a real vault; contradictions surfaced (declared, one-sided, a superseded note left active);
+      link communities with the maps of content they are missing, ordered by the gap register's
+      numbers. Reported, never resolved
 
 Next, in the order it should be built:
 
 - [ ] npm publish (the packages carry their publish metadata and the CLI is named `manent`; the
       release itself is a person's gesture, with their own token)
-- [ ] Communities as MOC suggestions (Leiden on the wikilink graph), fed by the gap register's
-      numbers and not by intuition — the half of curation the measurements do not yet support
 - [ ] Tasks extension (`io.modelcontextprotocol/tasks`) on the modern path, for long-running skills
 - [ ] MCP Apps (`ui://`): skill launcher, quarantine review queue, gap register, graph explorer
 - [ ] MCP spec 2026-07-28 wire upgrade on the legacy path, when the official SDK ships it

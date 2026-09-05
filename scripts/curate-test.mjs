@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { loadVault } from "../packages/core/dist/index.js";
-import { contradictions, duplicates, DEFAULT_LEXICAL_THRESHOLD } from "../packages/curate/dist/index.js";
+import { communities, contradictions, duplicates, DEFAULT_LEXICAL_THRESHOLD } from "../packages/curate/dist/index.js";
 
 const run = promisify(execFile);
 const cli = fileURLToPath(new URL("../packages/cli/dist/index.js", import.meta.url));
@@ -105,6 +105,81 @@ const after = await Promise.all(notes.map(async (n) => `${n.relPath}:${(await re
 ok("no note changed", before.join("|") === after.join("|"));
 const bad = await run("node", [cli, "curate", vault, "--threshold", "2"]).catch((e) => e);
 ok("a threshold outside (0, 1] is refused", bad.code === 1 && bad.stderr.includes("--threshold must be a similarity"), String(bad.stderr).trim());
+
+console.log("\n── communities ──");
+{
+  // Two rings of five joined by a single note; an index linking all ten, which
+  // is exactly the shape that collapses a graph into one community when it is
+  // left in; a MOC about one ring, a MOC about nothing in particular; and two
+  // notes nobody linked.
+  const g = join(root, "graph");
+  await mkdir(join(g, "memory"), { recursive: true });
+  const w = (name, fm, body) => writeFile(join(g, "memory", `${name}.md`), `---\nname: ${name}\n${fm}\n---\n\n${body}\n`, "utf8");
+  const ring = async (prefix) => {
+    for (let i = 0; i < 5; i++) {
+      await w(
+        `${prefix}${i}`,
+        `description: nota ${prefix} numero ${i}\ntype: reference`,
+        `Vedi [[${prefix}${(i + 1) % 5}]] e [[${prefix}${(i + 4) % 5}]].`,
+      );
+    }
+  };
+  await ring("alpha");
+  await ring("beta");
+  await w("bridge", "description: la nota che tiene insieme i due anelli\ntype: reference", "Da [[alpha0]] a [[beta0]].");
+  await w(
+    "everything",
+    "description: indice che linka tutto il vault\ntype: index",
+    [...Array(5).keys()].map((i) => `[[alpha${i}]] [[beta${i}]]`).join(" "),
+  );
+  await w("moc-alpha", "description: mappa dell anello alpha\ntype: moc", "[[alpha0]] [[alpha1]] [[alpha2]]");
+  // Touches each ring once: a map of neither.
+  await w("moc-sparsa", "description: mappa che tocca un po di tutto\ntype: moc", "[[alpha0]] [[beta0]] [[orfana-uno]] [[orfana-due]]");
+  // Two links into alpha out of nine: under the quarter that makes a map a map.
+  await w(
+    "moc-diluita",
+    "description: mappa larga che sfiora alpha\ntype: moc",
+    "[[alpha0]] [[alpha1]] [[orfana-uno]] [[orfana-due]] [[orfana-tre]] [[orfana-quattro]] [[orfana-cinque]] [[everything]] [[moc-alpha]]",
+  );
+  for (const n of ["uno", "due", "tre", "quattro", "cinque"]) {
+    await w(`orfana-${n}`, `description: nota ${n} che nessuno ha linkato\ntype: reference`, "Sola.");
+  }
+
+  const graphNotes = await loadVault(g);
+  const rep = communities(graphNotes, { minSize: 3 });
+  const sizes = rep.communities.map((c) => c.size);
+  ok("the index that links everything does not merge the rings", rep.communities.length === 2, JSON.stringify(sizes));
+  ok("the rings come out whole", sizes.reduce((a, b) => a + b, 0) === 11, JSON.stringify(sizes));
+  ok("index and MOC notes are held out of the graph", rep.excluded === 4, String(rep.excluded));
+  ok("the partition has real structure", rep.modularity > 0.3, rep.modularity.toFixed(3));
+  ok("notes nobody linked are counted, not clustered", rep.isolated === 5, String(rep.isolated));
+
+  const alpha = rep.communities.find((c) => c.members.includes("alpha1"));
+  const beta = rep.communities.find((c) => c.members.includes("beta1"));
+  ok("the ring with a map of its own is covered", alpha.mocs.some((m) => m.name === "moc-alpha" && m.links === 3), JSON.stringify(alpha.mocs));
+  ok("a map that touches a community once is not its map", rep.communities.every((c) => !c.mocs.some((m) => m.name === "moc-sparsa")));
+  ok("nor is one with two links out of nine", rep.communities.every((c) => !c.mocs.some((m) => m.name === "moc-diluita")));
+  ok("the other ring has no map: that is the suggestion", beta.mocs.length === 0, JSON.stringify(beta.mocs));
+  ok("hubs are members, at most three", alpha.hubs.length <= 3 && alpha.hubs.every((h) => alpha.members.includes(h)));
+
+  const again = communities(graphNotes, { minSize: 3 });
+  ok(
+    "two runs on the same vault give the same answer",
+    JSON.stringify(again.communities.map((c) => c.members)) === JSON.stringify(rep.communities.map((c) => c.members)),
+  );
+  ok("--min-size drops groups that are not subjects", communities(graphNotes, { minSize: 9 }).communities.length === 0);
+
+  // The register decides which suggestion is worth acting on.
+  const weighted = communities(graphNotes, {
+    minSize: 3,
+    gapWeight: new Map([
+      ["beta1", 3],
+      ["alpha1", 1],
+    ]),
+  });
+  ok("open gaps order the report", weighted.communities[0].members.includes("beta1"), JSON.stringify(weighted.communities.map((c) => c.openGaps)));
+  ok("the count is the sum over the members", weighted.communities[0].openGaps === 3);
+}
 
 await rm(root, { recursive: true, force: true });
 console.log(failures === 0 ? "\nall curate tests passed" : `\n${failures} FAILURES`);
