@@ -250,6 +250,19 @@ and reloads are serialized. Measured: a new file is searchable ~530 ms after the
 `post-receive` hook that checks out the shared branch is all a git-backed brain needs to serve
 what was just pushed. `--no-watch` turns it off.
 
+## Deploy: a git-backed brain
+
+The vault is a git repository, so deploying it is a push. `deploy/` carries the layout that has
+been running, and the reasoning: a bare repo whose **`pre-receive` hook is the lint gate** (a note
+with personal data or model-directed text is refused at the push, not found later in a history that
+is forever), a **`post-receive` that checks the tree out and restarts nothing** — the watcher
+re-indexes it in about half a second, and a restart would throw away the dense index and every warm
+view — a systemd unit, and an `agents.json` example.
+
+The one line worth repeating here: the gap register and the audit log live outside the vault, under
+`/var/lib/manent`, and **they are the part no git push restores**. Back that directory up
+separately. Details in [`deploy/README.md`](deploy/README.md).
+
 ## Retrieval, measured
 
 Ranking changes are decided by an eval harness, not by intuition. `manent eval` scores a
@@ -449,14 +462,14 @@ Done, in the order it was built:
       a commit message in one move; a review queue of quarantined notes by age and author
 - [x] **GitHub Actions**: build, every test, the lint gate and the retrieval gate on a public
       fixture vault, on two node versions; `npm pack --dry-run` on every package
+- [x] **Git-backed deploy recipe** (`deploy/`): the lint gate as a `pre-receive` hook, checkout on
+      `post-receive` with no restart, systemd unit, identities and audit paths as a server layout
 
 Next, in the order it should be built:
 
 - [ ] **Curation**: embedding-cluster dedup, contradiction detection (`contradicts` surfaced, never
       auto-resolved), Leiden communities as MOC suggestions, fed by the gap register's numbers,
       not by intuition
-- [ ] **Git-backed deploy recipe**: `post-receive`, then checkout, then the lint gate; the watcher does the
-      rest; identities and audit paths as a documented server layout
 - [ ] npm publish (the packages carry their publish metadata and the CLI is named `manent`; the
       release itself is a person's gesture, with their own token)
 - [ ] Tasks extension (`io.modelcontextprotocol/tasks`) on the modern path, for long-running skills

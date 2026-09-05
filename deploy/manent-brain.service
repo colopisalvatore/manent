@@ -1,0 +1,48 @@
+[Unit]
+Description=Manent brain (MCP server over the vault)
+Documentation=https://github.com/colopisalvatore/manent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=manent
+Group=manent
+WorkingDirectory=/opt/manent
+
+# The token, and nothing else, lives here: 0600, owned by the service user.
+# MANENT_HTTP_TOKEN=<long random>
+EnvironmentFile=/etc/manent/manent.env
+
+# --retriever fused wants the optional embedding model; the index is built in
+# the background, so the port opens immediately and answers lexically until the
+# model is warm. Drop to bm25 and the service needs nothing but node.
+#
+# The gap register and the audit log are state, not vault: they live outside it,
+# under /var/lib/manent, and they are the part of a brain that no git push can
+# restore. Back that directory up separately.
+ExecStart=/usr/bin/node /opt/manent/packages/cli/dist/index.js serve /srv/brain \
+  --http 3940 --host 127.0.0.1 \
+  --retriever fused \
+  --writable \
+  --agents /etc/manent/agents.json \
+  --gaps /var/lib/manent/gaps.sqlite \
+  --audit /var/lib/manent/audit.jsonl
+
+Restart=on-failure
+RestartSec=2
+TimeoutStopSec=30
+
+# The service reads one vault and writes two files; nothing else on the host.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/srv/brain /var/lib/manent
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+MemoryMax=2G
+
+[Install]
+WantedBy=multi-user.target

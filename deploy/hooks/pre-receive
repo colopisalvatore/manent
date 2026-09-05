@@ -1,0 +1,32 @@
+#!/bin/sh
+# Manent, git-backed deploy — the gate.
+#
+# Runs on the bare repository the vault is pushed to, before anything is
+# accepted. It extracts the pushed tree to a temporary directory and lints it
+# with the content rules strict: a note carrying personal data or text that
+# reads as an instruction to a model is refused at the push, not found later in
+# a history that is forever.
+#
+# Install: copy to <bare repo>/hooks/pre-receive, chmod +x.
+set -eu
+
+BRANCH="${MANENT_BRANCH:-main}"
+MANENT="${MANENT_BIN:-manent}"
+AUDIENCES="${MANENT_AUDIENCES:-}"
+
+while read -r _oldrev newrev refname; do
+  [ "$refname" = "refs/heads/$BRANCH" ] || continue
+  # A branch being deleted has an all-zero new revision: nothing to lint.
+  case "$newrev" in *[!0]*) ;; *) continue ;; esac
+
+  tmp=$(mktemp -d)
+  trap 'rm -rf "$tmp"' EXIT
+  git archive "$newrev" | tar -x -C "$tmp"
+
+  set -- "$tmp" --strict-content
+  [ -n "$AUDIENCES" ] && set -- "$@" --audiences "$AUDIENCES"
+  if ! "$MANENT" lint "$@"; then
+    echo "manent: push refused — the vault does not pass the lint gate" >&2
+    exit 1
+  fi
+done

@@ -1,0 +1,24 @@
+#!/bin/sh
+# Manent, git-backed deploy — the checkout.
+#
+# The push was accepted by pre-receive; this puts the new tree in the directory
+# the server watches. Nothing restarts: `manent serve` watches the vault and
+# re-indexes what changed, so a push is searchable about half a second after
+# the checkout. Restarting here would cost the dense index and every warm view.
+#
+# Install: copy to <bare repo>/hooks/post-receive, chmod +x, and set VAULT.
+set -eu
+
+VAULT="${MANENT_VAULT:-/srv/brain}"
+BRANCH="${MANENT_BRANCH:-main}"
+REPO=$(pwd)
+
+while read -r _oldrev newrev refname; do
+  [ "$refname" = "refs/heads/$BRANCH" ] || continue
+  case "$newrev" in *[!0]*) ;; *) continue ;; esac
+
+  git --git-dir="$REPO" --work-tree="$VAULT" checkout -f "$BRANCH"
+  # Files deleted in the push are not removed by `checkout -f`.
+  git --git-dir="$REPO" --work-tree="$VAULT" clean -fd -e .manent -e secrets
+  echo "manent: $VAULT is now at $(git --git-dir="$REPO" rev-parse --short "$newrev") — the watcher re-indexes it"
+done

@@ -1,0 +1,16 @@
+{
+  "customer-care": {
+    "token": "replace-me-with-32-random-bytes-hex",
+    "read": ["product", "public"],
+    "write": "quarantine/customer-care"
+  },
+  "coding": {
+    "token": "replace-me-with-another-32-random-bytes-hex",
+    "read": ["tech", "product"],
+    "write": "quarantine/coding"
+  },
+  "reporting": {
+    "token": "replace-me-with-a-third-32-random-bytes-hex",
+    "read": ["business"]
+  }
+}
