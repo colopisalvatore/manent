@@ -1,11 +1,13 @@
 {
-  "name": "manent",
-  "private": true,
+  "name": "manent-monorepo",
   "version": "0.0.1",
+  "description": "Monorepo for Manent \u2014 file-first, git-versioned memory for AI agents.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/colopisalvatore/manent.git"
+  },
   "type": "module",
-  "workspaces": [
-    "packages/*"
-  ],
   "engines": {
     "node": ">=20"
   },
@@ -17,6 +19,8 @@
     "test:era": "node scripts/era-test.mjs",
     "eval": "node scripts/eval-vault.mjs --golden eval/golden-aios.json",
     "eval:gate": "node scripts/eval-vault.mjs --golden eval/golden-aios.json --retriever bm25 --baseline eval/baseline-bm25.json",
+    "lint:fixture": "node packages/cli/dist/index.js lint eval/fixture-vault --strict-content --strict-links --audiences tech,product",
+    "eval:fixture": "node packages/cli/dist/index.js eval eval/fixture-vault --golden eval/golden-fixture.json --retriever bm25 --baseline eval/baseline-fixture-bm25.json",
     "tune": "node scripts/tune-retrieval.mjs",
     "eval:fused": "node scripts/eval-vault.mjs --golden eval/golden-aios.json --retriever fused",
     "tune:fusion": "node scripts/tune-fusion.mjs",
@@ -31,5 +35,9 @@
   "devDependencies": {
     "@types/node": "^22.20.1",
     "typescript": "^5.5.4"
-  }
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "private": true
 }

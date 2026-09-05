@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: build and test (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ["20.x", "22.x"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      # The embedding model is an optional dependency: leaving it out keeps the
+      # run to seconds and proves the default path needs nothing but node.
+      - run: npm ci --omit=optional
+      - run: npm run build
+
+      - run: npm run smoke
+      - run: npm run probe
+      - run: npm run test:era
+      - run: npm run test:oauth
+      - run: npm run test:write
+      - run: npm run test:links
+      - run: npm run test:gaps
+      - run: npm run test:acl
+      - run: npm run test:reload
+      - run: npm run test:promote
+
+      # The vault the gate runs on is `eval/fixture-vault`: invented notes, so
+      # the corpus can be public. Nobody's real brain ever reaches CI.
+      - name: lint gate on the fixture vault
+        run: npm run lint:fixture
+      - name: retrieval regression gate on the fixture vault
+        run: npm run eval:fixture
+
+  publish-dry-run:
+    name: npm pack (what publishing would ship)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+      - run: npm ci --omit=optional
+      - run: npm run build
+      # No publish here: releasing is a person's gesture, with their own token.
+      # This only says what the tarballs would contain, so a missing `files`
+      # entry is caught before a release and not after one.
+      - run: npm pack --workspaces --dry-run

@@ -1,0 +1,42 @@
+{
+  "retriever": "bm25",
+  "overall": {
+    "queries": 32,
+    "hit1": 0.84375,
+    "hit3": 0.9375,
+    "recall5": 0.96875,
+    "recall10": 0.96875,
+    "mrr": 0.8916666666666666,
+    "ndcg10": 0.9062205381222566
+  },
+  "bySource": {
+    "curated": {
+      "queries": 12,
+      "hit1": 0.9166666666666666,
+      "hit3": 1,
+      "recall5": 1,
+      "recall10": 1,
+      "mrr": 0.9583333333333334,
+      "ndcg10": 0.956772888258851
+    },
+    "oblique": {
+      "queries": 4,
+      "hit1": 0,
+      "hit3": 0.5,
+      "recall5": 0.75,
+      "recall10": 0.75,
+      "mrr": 0.2583333333333333,
+      "ndcg10": 0.3794456402014998
+    },
+    "auto": {
+      "queries": 16,
+      "hit1": 1,
+      "hit3": 1,
+      "recall5": 1,
+      "recall10": 1,
+      "mrr": 1,
+      "ndcg10": 1
+    }
+  },
+  "queries": 32
+}

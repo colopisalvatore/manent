@@ -1,0 +1,2 @@
+# the fixture vault is committed on purpose: it is the corpus the CI gate runs on
+.manent/

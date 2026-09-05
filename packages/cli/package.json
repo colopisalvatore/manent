@@ -1,22 +1,54 @@
 {
-  "name": "@manent/cli",
+  "name": "manent",
   "version": "0.0.1",
+  "description": "Manent: file-first, git-versioned memory for AI agents. Vault linting, retrieval eval and an MCP server.",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "memory",
+    "agents",
+    "knowledge-base",
+    "retrieval",
+    "obsidian",
+    "markdown"
+  ],
+  "license": "Apache-2.0",
+  "author": "Salvatore Colopi",
+  "homepage": "https://github.com/colopisalvatore/manent#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/colopisalvatore/manent.git",
+    "directory": "packages/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/colopisalvatore/manent/issues"
+  },
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
     "manent": "dist/index.js"
   },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "build": "tsc -b"
+    "build": "tsc -b",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@manent/core": "*",
-    "@manent/spec": "*",
-    "@manent/lint": "*",
-    "@manent/server": "*",
+    "@manent/core": "0.0.1",
+    "@manent/spec": "0.0.1",
+    "@manent/lint": "0.0.1",
+    "@manent/server": "0.0.1",
     "commander": "^12.1.0",
-    "@manent/retrieval": "*",
-    "@manent/eval": "*"
+    "@manent/retrieval": "0.0.1",
+    "@manent/eval": "0.0.1"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

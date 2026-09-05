@@ -1,20 +1,52 @@
 {
   "name": "@manent/retrieval",
   "version": "0.0.1",
+  "description": "Manent retrieval: BM25, local dense embeddings, RRF fusion, graph expansion, status-aware ranking.",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "memory",
+    "agents",
+    "knowledge-base",
+    "retrieval",
+    "obsidian",
+    "markdown"
+  ],
+  "license": "Apache-2.0",
+  "author": "Salvatore Colopi",
+  "homepage": "https://github.com/colopisalvatore/manent#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/colopisalvatore/manent.git",
+    "directory": "packages/retrieval"
+  },
+  "bugs": {
+    "url": "https://github.com/colopisalvatore/manent/issues"
+  },
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
     ".": "./dist/index.js"
   },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "build": "tsc -b"
+    "build": "tsc -b",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@manent/core": "*",
+    "@manent/core": "0.0.1",
     "minisearch": "^7.1.0"
   },
   "optionalDependencies": {
     "@huggingface/transformers": "^3.8.1"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

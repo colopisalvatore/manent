@@ -26,7 +26,7 @@ Agent memory today is either a proprietary vector-DB dump (lock-in, no audit tra
 | `@manent/eval` | Eval harness: golden sets, recall@k / MRR / nDCG, regression gate |
 | `@manent/lint` | Rule engine: schema, links, duplicates, orphans, personal data, model-directed text, audience labels |
 | `@manent/server` | MCP server over a vault: read tools, gated write tools, gap register, identities, audit, hot reload; see [Protocol eras](#protocol-eras) |
-| `@manent/cli` | `manent init | lint | eval | serve | gaps` |
+| `manent` | The CLI: `init | lint | eval | serve | gaps | promote` |
 
 ## Quickstart
 
@@ -409,8 +409,17 @@ npm run test:acl       # identities, visibility at load, quarantine, approval, a
 npm run test:reload    # hot reload: add, edit, delete, bursts
 npm run test:promote   # promotion: the queue, the refusals, the move, the commit
 npm run test:warmup    # dense ranker warms up in the background
-MANENT_VAULT=<vault> npm run eval:gate   # retrieval regression gate; baselines are metrics-only files
+npm run lint:fixture   # the lint gate on eval/fixture-vault, content rules strict
+npm run eval:fixture   # retrieval regression gate on eval/fixture-vault
+MANENT_VAULT=<vault> npm run eval:gate   # the same gate on your own vault; baselines are metrics-only files
 ```
+
+CI (`.github/workflows/ci.yml`) runs all of it on node 20 and 22 except `test:warmup`, which would
+download the embedding model, and `npm pack --dry-run` on every package, so a release ships what it
+means to. The gates run on `eval/fixture-vault`: nineteen invented notes — an invented hosting
+provider, an invented project — because a corpus a public CI can read is a corpus nobody wrote
+their real memory into. Its numbers have the shape of the real thing (curated hit@1 91.7%, oblique
+0%, `eval/baseline-fixture-bm25.json`), so a change that breaks retrieval breaks the gate.
 
 ## Roadmap
 
@@ -438,6 +447,8 @@ Done, in the order it was built:
 - [x] Lint gate for CI: `pii`, `injection`, `audience-unknown`, `--strict-content`
 - [x] **Promotion tooling**: `manent promote`: out of quarantine with status, audience, folder and
       a commit message in one move; a review queue of quarantined notes by age and author
+- [x] **GitHub Actions**: build, every test, the lint gate and the retrieval gate on a public
+      fixture vault, on two node versions; `npm pack --dry-run` on every package
 
 Next, in the order it should be built:
 
@@ -446,7 +457,8 @@ Next, in the order it should be built:
       not by intuition
 - [ ] **Git-backed deploy recipe**: `post-receive`, then checkout, then the lint gate; the watcher does the
       rest; identities and audit paths as a documented server layout
-- [ ] npm publish + GitHub Actions (build, smoke, tests, eval gate on a fixture vault)
+- [ ] npm publish (the packages carry their publish metadata and the CLI is named `manent`; the
+      release itself is a person's gesture, with their own token)
 - [ ] Tasks extension (`io.modelcontextprotocol/tasks`) on the modern path, for long-running skills
 - [ ] MCP Apps (`ui://`): skill launcher, quarantine review queue, gap register, graph explorer
 - [ ] MCP spec 2026-07-28 wire upgrade on the legacy path, when the official SDK ships it

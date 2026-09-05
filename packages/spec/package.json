@@ -1,6 +1,28 @@
 {
   "name": "@manent/spec",
   "version": "0.0.1",
+  "description": "Manent note spec: frontmatter contract, JSON Schema, note types and statuses.",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "memory",
+    "agents",
+    "knowledge-base",
+    "retrieval",
+    "obsidian",
+    "markdown"
+  ],
+  "license": "Apache-2.0",
+  "author": "Salvatore Colopi",
+  "homepage": "https://github.com/colopisalvatore/manent#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/colopisalvatore/manent.git",
+    "directory": "packages/spec"
+  },
+  "bugs": {
+    "url": "https://github.com/colopisalvatore/manent/issues"
+  },
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -12,7 +34,14 @@
     "schemas",
     "SPEC.md"
   ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "build": "tsc -b"
+    "build": "tsc -b",
+    "prepublishOnly": "npm run build"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

@@ -1,17 +1,49 @@
 {
   "name": "@manent/core",
   "version": "0.0.1",
+  "description": "Manent core: vault loading, note parsing, wikilink graph, audiences, contained writes and promotion.",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "memory",
+    "agents",
+    "knowledge-base",
+    "retrieval",
+    "obsidian",
+    "markdown"
+  ],
+  "license": "Apache-2.0",
+  "author": "Salvatore Colopi",
+  "homepage": "https://github.com/colopisalvatore/manent#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/colopisalvatore/manent.git",
+    "directory": "packages/core"
+  },
+  "bugs": {
+    "url": "https://github.com/colopisalvatore/manent/issues"
+  },
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
     ".": "./dist/index.js"
   },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "build": "tsc -b"
+    "build": "tsc -b",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@manent/spec": "*",
+    "@manent/spec": "0.0.1",
     "gray-matter": "^4.0.3"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

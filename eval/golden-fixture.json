@@ -1,0 +1,86 @@
+{
+  "name": "fixture vault, questions as someone would ask them",
+  "queries": [
+    {
+      "query": "the api hangs under load but the database looks idle",
+      "expected": ["connection-pool-exhaustion"],
+      "source": "curated"
+    },
+    {
+      "query": "il servizio continua a riavviarsi dopo il deploy",
+      "expected": ["systemd-restart-loop"],
+      "source": "curated"
+    },
+    {
+      "query": "504 gateway timeout on a long export",
+      "expected": ["nginx-proxy-timeout"],
+      "source": "curated"
+    },
+    {
+      "query": "people are logged out when two tabs refresh at once",
+      "expected": ["oauth-refresh-rotation"],
+      "source": "curated"
+    },
+    {
+      "query": "cosa resta fuori dal backup della notte",
+      "expected": ["backup-notturno-incrementale"],
+      "source": "curated"
+    },
+    {
+      "query": "how should the cache key be built so entries stop going stale",
+      "expected": ["cache-invalidation-by-hash"],
+      "source": "curated"
+    },
+    {
+      "query": "what do we do before starting performance work",
+      "expected": ["measure-before-optimizing"],
+      "source": "curated"
+    },
+    {
+      "query": "may an agent delete generated files it was not asked about",
+      "expected": ["ask-before-destructive-ops"],
+      "source": "curated"
+    },
+    {
+      "query": "where are customer invoices paid and reconciled",
+      "expected": ["invoice-portal"],
+      "source": "curated"
+    },
+    {
+      "query": "what does grounding an answer in retrieved passages fix and what it does not",
+      "expected": ["retrieval-augmented-generation"],
+      "source": "curated"
+    },
+    {
+      "query": "which hosting provider are we on and what does its cron not inherit",
+      "expected": ["acme-hosting"],
+      "source": "curated"
+    },
+    {
+      "query": "at what concurrency did the portal start timing out",
+      "expected": ["2026-01-10-load-test-report", "connection-pool-exhaustion"],
+      "source": "curated"
+    },
+    {
+      "query": "everything got slow at the same time and nobody deployed anything",
+      "expected": ["connection-pool-exhaustion"],
+      "source": "oblique",
+      "note": "the symptom as it is reported, not as it is filed"
+    },
+    {
+      "query": "prima di mettermi a ottimizzare cosa dovrei fare",
+      "expected": ["measure-before-optimizing"],
+      "source": "oblique"
+    },
+    {
+      "query": "i clienti dicono che il sito li sbatte fuori",
+      "expected": ["oauth-refresh-rotation"],
+      "source": "oblique"
+    },
+    {
+      "query": "un agente ha cancellato dei file senza chiedere",
+      "expected": ["ask-before-destructive-ops"],
+      "source": "oblique"
+    }
+  ]
+}

@@ -1,19 +1,51 @@
 {
   "name": "@manent/lint",
   "version": "0.0.1",
+  "description": "Manent lint: validates a vault against the spec, and gates personal data and model-directed text.",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "memory",
+    "agents",
+    "knowledge-base",
+    "retrieval",
+    "obsidian",
+    "markdown"
+  ],
+  "license": "Apache-2.0",
+  "author": "Salvatore Colopi",
+  "homepage": "https://github.com/colopisalvatore/manent#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/colopisalvatore/manent.git",
+    "directory": "packages/lint"
+  },
+  "bugs": {
+    "url": "https://github.com/colopisalvatore/manent/issues"
+  },
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
     ".": "./dist/index.js"
   },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "build": "tsc -b"
+    "build": "tsc -b",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@manent/core": "*",
-    "@manent/spec": "*",
+    "@manent/core": "0.0.1",
+    "@manent/spec": "0.0.1",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

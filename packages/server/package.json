@@ -1,20 +1,52 @@
 {
   "name": "@manent/server",
   "version": "0.0.1",
+  "description": "Manent server: the MCP server over a vault \u2014 two protocol eras, OAuth 2.1, identities, write gate.",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "memory",
+    "agents",
+    "knowledge-base",
+    "retrieval",
+    "obsidian",
+    "markdown"
+  ],
+  "license": "Apache-2.0",
+  "author": "Salvatore Colopi",
+  "homepage": "https://github.com/colopisalvatore/manent#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/colopisalvatore/manent.git",
+    "directory": "packages/server"
+  },
+  "bugs": {
+    "url": "https://github.com/colopisalvatore/manent/issues"
+  },
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
     ".": "./dist/index.js"
   },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "build": "tsc -b"
+    "build": "tsc -b",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.17.0",
-    "@manent/core": "*",
-    "@manent/spec": "*",
+    "@manent/core": "0.0.1",
+    "@manent/spec": "0.0.1",
     "zod": "^3.23.8",
-    "@manent/retrieval": "*"
+    "@manent/retrieval": "0.0.1"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
