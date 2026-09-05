@@ -25,8 +25,9 @@ Agent memory today is either a proprietary vector-DB dump (lock-in, no audit tra
 | `@manent/retrieval` | Ranking: BM25 lexical, local dense embeddings, graph expansion, RRF fusion, status demotion |
 | `@manent/eval` | Eval harness: golden sets, recall@k / MRR / nDCG, regression gate |
 | `@manent/lint` | Rule engine: schema, links, duplicates, orphans, personal data, model-directed text, audience labels |
+| `@manent/curate` | Curation: near-duplicate pairs (lexical or dense) and declared contradictions, reported for a person |
 | `@manent/server` | MCP server over a vault: read tools, gated write tools, gap register, identities, audit, hot reload; see [Protocol eras](#protocol-eras) |
-| `manent` | The CLI: `init | lint | eval | serve | gaps | promote` |
+| `manent` | The CLI: `init | lint | eval | serve | gaps | promote | curate` |
 
 ## Quickstart
 
@@ -204,6 +205,46 @@ not in quarantine, a destination already taken or outside the vault, an audience
 not a slug, and `private` alongside another label — `private` is the absence of an audience, not
 one more of them, and a note carrying both reads as private while being served to everybody
 holding the other label. Every refusal happens before anything is written.
+
+## Curation: what a vault accumulates
+
+A brain that is written to keeps two things nobody added on purpose: the same thing said twice, and
+two notes that disagree. Both cost the reader, and both are judgements about meaning — so
+`manent curate` reports and never resolves.
+
+```
+manent curate <vault>                          # both reports
+manent curate <vault> --duplicates --dense     # by meaning, not by shared words
+manent curate <vault> --contradictions --json
+```
+
+**Near-duplicates.** Two notes saying the same thing rank lower than either would alone: the ranker
+splits the evidence between them, and the reader who finds one never learns the other exists. The
+default comparison needs no model — word triples, scored by the larger of Jaccard and containment
+(how much of the smaller note sits inside the bigger one), with containment allowed to speak only
+when the two are within a factor of four in size, and pairs of very short notes dropped, because a
+one-line note shares a sentence with anything. `--dense` compares meaning instead, using the same
+embedding model as the ranker.
+
+Both thresholds are measured on a 488-note vault, not guessed:
+
+| | median | p99.9 | max | default | pairs reported |
+|---|---|---|---|---|---|
+| lexical (word triples) | 0.005 | 0.214 | 0.40 | **0.25** | 6 |
+| dense (whole-note cosine) | 0.851 | 0.933 | 0.973 | **0.95** | 35 |
+
+The dense numbers say something worth saying out loud: this model puts everything one person wrote
+about one job in a narrow band, so at those scores the dense list is **topic twins** — a handoff and
+the retro of the same day, a project note and its retro — while the lexical list is where the actual
+copies are. Read them as two different questions.
+
+**Contradictions.** Only what is checkable without understanding the notes: a pair where both
+declare `contradicts` (a work item until one is deprecated or a note reconciles them); a one-sided
+declaration, where the reader who arrives at the other note never learns there is an argument; and a
+note that `supersedes` another which is still `active` — the decision was made and the vault was not
+told, so the replaced note still ranks and still answers. Semantic contradiction detection is
+deliberately absent: it would be a guess dressed as a finding, and the duplicate report already
+surfaces the pairs worth looking at.
 
 ## The gap register
 
@@ -421,6 +462,7 @@ npm run test:gaps      # gap register: redaction, grouping, follow, close, feedb
 npm run test:acl       # identities, visibility at load, quarantine, approval, audit
 npm run test:reload    # hot reload: add, edit, delete, bursts
 npm run test:promote   # promotion: the queue, the refusals, the move, the commit
+npm run test:curate    # curation: duplicates, contradictions, and the vault it must not touch
 npm run test:warmup    # dense ranker warms up in the background
 npm run lint:fixture   # the lint gate on eval/fixture-vault, content rules strict
 npm run eval:fixture   # retrieval regression gate on eval/fixture-vault
@@ -464,14 +506,16 @@ Done, in the order it was built:
       fixture vault, on two node versions; `npm pack --dry-run` on every package
 - [x] **Git-backed deploy recipe** (`deploy/`): the lint gate as a `pre-receive` hook, checkout on
       `post-receive` with no restart, systemd unit, identities and audit paths as a server layout
+- [x] **Curation** (`manent curate`): near-duplicate pairs, lexical or dense, thresholds measured on
+      a real vault; contradictions surfaced (declared, one-sided, a superseded note left active).
+      Reported, never resolved
 
 Next, in the order it should be built:
 
-- [ ] **Curation**: embedding-cluster dedup, contradiction detection (`contradicts` surfaced, never
-      auto-resolved), Leiden communities as MOC suggestions, fed by the gap register's numbers,
-      not by intuition
 - [ ] npm publish (the packages carry their publish metadata and the CLI is named `manent`; the
       release itself is a person's gesture, with their own token)
+- [ ] Communities as MOC suggestions (Leiden on the wikilink graph), fed by the gap register's
+      numbers and not by intuition — the half of curation the measurements do not yet support
 - [ ] Tasks extension (`io.modelcontextprotocol/tasks`) on the modern path, for long-running skills
 - [ ] MCP Apps (`ui://`): skill launcher, quarantine review queue, gap register, graph explorer
 - [ ] MCP spec 2026-07-28 wire upgrade on the legacy path, when the official SDK ships it

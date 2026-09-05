@@ -40,6 +40,7 @@ jobs:
       - run: npm run test:acl
       - run: npm run test:reload
       - run: npm run test:promote
+      - run: npm run test:curate
 
       # The vault the gate runs on is `eval/fixture-vault`: invented notes, so
       # the corpus can be public. Nobody's real brain ever reaches CI.

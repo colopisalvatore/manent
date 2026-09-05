@@ -8,6 +8,7 @@ import { initVault } from "./init.js";
 import { RETRIEVERS, runEvalCommand } from "./eval.js";
 import { runGapsCommand } from "./gaps.js";
 import { runPromoteCommand } from "./promote.js";
+import { runCurateCommand } from "./curate.js";
 
 const program = new Command();
 
@@ -269,6 +270,52 @@ program
         to: opts.to,
         dryRun: !!opts.dryRun,
         commit: !!opts.commit,
+        limit: opts.limit !== undefined ? Number(opts.limit) : undefined,
+        json: !!opts.json,
+      });
+      if (code !== 0) process.exitCode = code;
+    },
+  );
+
+program
+  .command("curate")
+  .description("what the vault has accumulated: near-duplicate notes and declared contradictions, reported for a person to decide")
+  .argument("[dir]", "vault directory", ".")
+  .option("--duplicates", "only the near-duplicate report")
+  .option("--contradictions", "only the contradiction report")
+  .option("--dense", "compare notes by meaning (needs the embedding model) instead of by shared words")
+  .option("--model <id>", "embedding model for --dense")
+  .option("--threshold <n>", "similarity at or above which a pair is reported (dense 0.94, lexical 0.35)")
+  .option("--include-related", "also report pairs that already link to or supersede each other")
+  .option("--limit <n>", "pairs to show")
+  .option("--json", "machine-readable output")
+  .action(
+    async (
+      dir: string,
+      opts: {
+        duplicates?: boolean;
+        contradictions?: boolean;
+        dense?: boolean;
+        model?: string;
+        threshold?: string;
+        includeRelated?: boolean;
+        limit?: string;
+        json?: boolean;
+      },
+    ) => {
+      const threshold = opts.threshold !== undefined ? Number(opts.threshold) : undefined;
+      if (threshold !== undefined && !(threshold > 0 && threshold <= 1)) {
+        console.error(`--threshold must be a similarity in (0, 1], got "${opts.threshold}"`);
+        process.exitCode = 1;
+        return;
+      }
+      const code = await runCurateCommand(resolve(dir), {
+        duplicates: !!opts.duplicates,
+        contradictions: !!opts.contradictions,
+        dense: !!opts.dense,
+        model: opts.model,
+        threshold,
+        includeRelated: !!opts.includeRelated,
         limit: opts.limit !== undefined ? Number(opts.limit) : undefined,
         json: !!opts.json,
       });

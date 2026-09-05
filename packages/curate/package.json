@@ -1,7 +1,7 @@
 {
-  "name": "manent",
+  "name": "@manent/curate",
   "version": "0.0.1",
-  "description": "Manent: file-first, git-versioned memory for AI agents. Vault linting, retrieval eval and an MCP server.",
+  "description": "Manent curation: near-duplicate notes and declared contradictions, reported for a person and never resolved by the tool.",
   "keywords": [
     "mcp",
     "model-context-protocol",
@@ -18,7 +18,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/colopisalvatore/manent.git",
-    "directory": "packages/cli"
+    "directory": "packages/curate"
   },
   "bugs": {
     "url": "https://github.com/colopisalvatore/manent/issues"
@@ -26,8 +26,8 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "bin": {
-    "manent": "dist/index.js"
+  "exports": {
+    ".": "./dist/index.js"
   },
   "files": [
     "dist"
@@ -41,13 +41,7 @@
   },
   "dependencies": {
     "@manent/core": "0.0.1",
-    "@manent/curate": "0.0.1",
-    "@manent/spec": "0.0.1",
-    "@manent/lint": "0.0.1",
-    "@manent/server": "0.0.1",
-    "commander": "^12.1.0",
-    "@manent/retrieval": "0.0.1",
-    "@manent/eval": "0.0.1"
+    "@manent/retrieval": "0.0.1"
   },
   "publishConfig": {
     "access": "public"
