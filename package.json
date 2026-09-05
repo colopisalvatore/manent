@@ -32,7 +32,8 @@
     "test:reload": "node scripts/reload-test.mjs",
     "test:promote": "node scripts/promote-test.mjs",
     "test:curate": "node scripts/curate-test.mjs",
-    "test:tasks": "node scripts/tasks-test.mjs"
+    "test:tasks": "node scripts/tasks-test.mjs",
+    "test:apps": "node scripts/apps-test.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",

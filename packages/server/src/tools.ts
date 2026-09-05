@@ -1,7 +1,16 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { z, type ZodRawShape } from "zod";
-import { neighbors, redactPii, scanInjection, scanPii, writeNote, WriteRefused, type WriteMode } from "@manent/core";
+import {
+  neighbors,
+  redactPii,
+  reviewQueue,
+  scanInjection,
+  scanPii,
+  writeNote,
+  WriteRefused,
+  type WriteMode,
+} from "@manent/core";
 import { AUDIENCE_PRIVATE, NOTE_TYPES, SLUG_RE } from "@manent/spec";
 import { communities, contradictions, duplicates } from "@manent/curate";
 import type { BrainContext } from "./context.js";
@@ -52,6 +61,12 @@ export interface BrainTool {
    * instead of a held-open connection. Everywhere else it runs inline.
    */
   longRunning?: boolean;
+  /**
+   * The `ui://` resource that renders this tool's answer (MCP Apps). Advertised
+   * as `_meta.ui` on the modern path; a host without the extension ignores it
+   * and shows the same JSON.
+   */
+  ui?: { resourceUri: string };
   /** JSON Schema 2020-12 — the modern path serves this verbatim */
   inputSchemaJson: Record<string, unknown>;
   /** same contract expressed for the SDK's Zod-based registration */
@@ -395,6 +410,58 @@ export const BRAIN_TOOLS: BrainTool[] = [
         });
       }
       return text(out);
+    },
+  },
+  {
+    name: "brain_quarantine",
+    ui: { resourceUri: "ui://manent/quarantine" },
+    description:
+      "The review queue: notes an agent wrote that are waiting for a person, oldest first, with author, audience and age. Read-only — promoting one is `manent promote`, a commit with a name on it.",
+    inputSchemaJson: {
+      type: "object",
+      properties: {
+        author: { type: "string", description: "only what this identity wrote" },
+        limit: { type: "integer", minimum: 1, maximum: 500, description: "max rows, default 100" },
+      },
+      additionalProperties: false,
+    },
+    inputSchemaZod: {
+      author: z.string().optional().describe("only what this identity wrote"),
+      limit: z.number().int().min(1).max(500).optional().describe("max rows, default 100"),
+    },
+    async run(args, ctx) {
+      // Quarantined notes are private, so this is the owner's queue by
+      // construction: an agent's view never contains them, its own included.
+      const queue = await reviewQueue(ctx.notes, { author: args.author != null ? String(args.author) : undefined });
+      const limit = typeof args.limit === "number" ? args.limit : 100;
+      return text({ queue: queue.slice(0, limit), waiting: queue.length });
+    },
+  },
+  {
+    name: "brain_gaps",
+    ui: { resourceUri: "ui://manent/gaps" },
+    description:
+      "The gap register: questions the brain could not answer, by how often they were asked. Owner only — one agent does not get to enumerate what the others asked.",
+    inputSchemaJson: {
+      type: "object",
+      properties: {
+        status: { enum: ["open", "closed", "dismissed", "all"], description: "default open" },
+        limit: { type: "integer", minimum: 1, maximum: 200, description: "max rows, default 50" },
+      },
+      additionalProperties: false,
+    },
+    inputSchemaZod: {
+      status: z.enum(["open", "closed", "dismissed", "all"]).optional().describe("default open"),
+      limit: z.number().int().min(1).max(200).optional().describe("max rows, default 50"),
+    },
+    run(args, ctx) {
+      if (!ctx.identity.owner) return refuse("The gap register is the owner's: it holds what every agent asked.");
+      if (!ctx.gaps) {
+        return refuse("This server was started without a gap register: restart it with --gaps <sqlite file> to record what could not be answered.");
+      }
+      const status = (args.status as "open" | "closed" | "dismissed" | "all" | undefined) ?? "open";
+      const limit = typeof args.limit === "number" ? args.limit : 50;
+      return text({ gaps: ctx.gaps.listGaps({ status, limit }) });
     },
   },
 ];

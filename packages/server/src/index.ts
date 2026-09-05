@@ -17,6 +17,15 @@ export {
 } from "./gaps.js";
 export { AuditLog, type AuditEntry } from "./audit.js";
 export {
+  APP_RESOURCES,
+  APP_MIME_TYPE,
+  UI_EXTENSION,
+  appResourceList,
+  findAppResource,
+  readAppResource,
+  type AppResource,
+} from "./apps.js";
+export {
   TaskStore,
   TASKS_EXTENSION,
   DEFAULT_TASK_TTL_MS,

@@ -26,6 +26,8 @@ const EXPECTED_TOOLS = [
   "brain_grep",
   "brain_feedback",
   "brain_curate",
+  "brain_quarantine",
+  "brain_gaps",
 ];
 const WRITE_TOOLS = ["brain_write", "brain_append"];
 const hasAllTools = (list) =>

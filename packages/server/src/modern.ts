@@ -1,4 +1,5 @@
 import type { BrainContext } from "./context.js";
+import { appResourceList, readAppResource, UI_EXTENSION } from "./apps.js";
 import { TASKS_EXTENSION } from "./tasks.js";
 import { callTool, findTool, toolsFor, type CallContext } from "./tools.js";
 
@@ -114,7 +115,11 @@ export async function handleModernRequest(
         id,
         result: withMeta({
           supportedVersions: [...MODERN_VERSIONS],
-          capabilities: { tools: {}, extensions: { [TASKS_EXTENSION]: {} } },
+          capabilities: {
+            tools: {},
+            resources: {},
+            extensions: { [TASKS_EXTENSION]: {}, [UI_EXTENSION]: { mimeTypes: ["text/html;profile=mcp-app"] } },
+          },
           instructions:
             "File-first memory vault. Search with brain_search, open a note with brain_read, walk its links with brain_neighbors. " +
             "Writes, where allowed, ask the person to confirm and land in quarantine for agents. " +
@@ -133,11 +138,27 @@ export async function handleModernRequest(
             name: t.name,
             description: t.description,
             inputSchema: t.inputSchemaJson,
+            // A host without MCP Apps ignores `_meta` and shows the same JSON.
+            ...(t.ui ? { _meta: { ui: { resourceUri: t.ui.resourceUri, visibility: ["model", "app"] } } } : {}),
           })),
           ttlMs: LIST_TTL_MS,
           cacheScope: "private",
         }),
       };
+
+    case "resources/list":
+      return {
+        jsonrpc: "2.0",
+        id,
+        result: withMeta({ resources: appResourceList(), ttlMs: LIST_TTL_MS, cacheScope: "private" }),
+      };
+
+    case "resources/read": {
+      const uri = String(((b.params ?? {}) as Record<string, unknown>).uri ?? "");
+      const resource = readAppResource(uri);
+      if (!resource) return { jsonrpc: "2.0", id, error: { code: INVALID_PARAMS, message: `Unknown resource: ${uri}` } };
+      return { jsonrpc: "2.0", id, result: withMeta(resource) };
+    }
 
     case "tasks/get": {
       const taskId = String(((b.params ?? {}) as Record<string, unknown>).taskId ?? "");

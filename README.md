@@ -97,6 +97,7 @@ replay, forged token and disallowed redirect.
 | `brain_list` / `brain_grep` | enumerate, or regex over bodies |
 | `brain_feedback` | "this answer was wrong / outdated / incomplete / helpful"; see [The gap register](#the-gap-register) |
 | `brain_curate` | near-duplicates, contradictions and unmapped communities over the whole vault; comes back as a task on the modern path, see [Long-running calls](#long-running-calls-the-tasks-extension) |
+| `brain_quarantine` / `brain_gaps` | the review queue and the gap register, each with a page to read it in; see [MCP Apps](#mcp-apps-two-work-queues-with-a-face) |
 | `brain_write` / `brain_append` | listed only with `--writable`; gated, stamped, approved; see [Writes](#writes-the-gate-quarantine-and-approval) |
 
 Every tool runs on the caller's **view** of the vault. That is the whole access model, and it is
@@ -435,6 +436,38 @@ warnings for a person and, with `--strict-content`, errors for a pipeline. Run t
 a pre-commit hook or in CI on the brain repository: a note that fails it never lands in the
 shared branch, which is the only place the server reads from.
 
+## MCP Apps: two work queues with a face
+
+Two of this server's answers are lists a person acts on one row at a time: the notes agents wrote
+that nobody has promoted, and the questions the brain could not answer. As text in a transcript
+they are a wall to skim; as a small page they are a queue, sorted, with the number that matters in
+front. So the modern path implements `io.modelcontextprotocol/ui` (MCP Apps, final 2026-01-26) and
+ships two pages:
+
+| Resource | Tool it lays out |
+|---|---|
+| `ui://manent/quarantine` | `brain_quarantine` — what is waiting, oldest first, with author, audience and age |
+| `ui://manent/gaps` | `brain_gaps` — open gaps by how often they were asked, with the command that closes one |
+
+They are served as `text/html;profile=mcp-app` from `resources/list` / `resources/read`, and each
+tool points at its page with `_meta.ui.resourceUri`. A host without the extension ignores the
+metadata and shows the same JSON — the page is a way to read the answer, never the only way to get
+it.
+
+Two properties make them safe to render inside somebody's chat, and both are tested:
+
+- **Nothing is loaded from anywhere.** No script `src`, no stylesheet, no font, no `fetch`. The
+  page *is* the resource; its declared CSP allows no connect domains at all, because it needs none.
+  Data arrives from the host: the tool result that opened the page, or a `tools/call` the page asks
+  the host to make when you press Refresh.
+- **The pages decide nothing.** They read and they re-ask. Promoting a note and closing a gap are
+  writes, and writes go through the gate and the person's confirmation — never through a button a
+  page could press on its own. Each row instead carries the command that would do it.
+
+`brain_gaps` is the owner's: one agent does not get to enumerate what the others asked. The
+quarantine queue needs no such rule — quarantined notes are private, so an agent's view never
+contains them.
+
 ## Long-running calls: the tasks extension
 
 Every brain tool answers in milliseconds except the one that reads the whole vault at once:
@@ -524,6 +557,7 @@ npm run test:reload    # hot reload: add, edit, delete, bursts
 npm run test:promote   # promotion: the queue, the refusals, the move, the commit
 npm run test:curate    # curation: duplicates, contradictions, communities, and the vault it must not touch
 npm run test:tasks     # tasks extension: handle, polling, ownership, cancel, ttl
+npm run test:apps      # MCP Apps: declaration, linkage, self-contained pages, what they are shown
 npm run test:warmup    # dense ranker warms up in the background
 npm run lint:fixture   # the lint gate on eval/fixture-vault, content rules strict
 npm run eval:fixture   # retrieval regression gate on eval/fixture-vault
@@ -573,12 +607,15 @@ Done, in the order it was built:
       numbers. Reported, never resolved
 - [x] **Tasks extension** (`io.modelcontextprotocol/tasks`, SEP-2663) on the modern path: a call whose
       cost grows with the vault comes back as a task to poll, owned by the identity that started it
+- [x] **MCP Apps** (`io.modelcontextprotocol/ui`): `ui://manent/quarantine` and `ui://manent/gaps`,
+      self-contained pages that load nothing and write nothing, each bound to the tool it lays out
 
 Next, in the order it should be built:
 
 - [ ] npm publish (the packages carry their publish metadata and the CLI is named `manent`; the
       release itself is a person's gesture, with their own token)
-- [ ] MCP Apps (`ui://`): skill launcher, quarantine review queue, gap register, graph explorer
+- [ ] A graph explorer app: the third view worth having, and the one that needs a layout engine
+      rather than a list
 - [ ] MCP spec 2026-07-28 wire upgrade on the legacy path, when the official SDK ships it
 
 Open questions the code does not settle: who owns the brain infrastructure once four agents
