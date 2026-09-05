@@ -464,6 +464,83 @@ export const BRAIN_TOOLS: BrainTool[] = [
       return text({ gaps: ctx.gaps.listGaps({ status, limit }) });
     },
   },
+  {
+    name: "brain_graph",
+    ui: { resourceUri: "ui://manent/graph" },
+    description:
+      "The wikilink neighbourhood as a graph: nodes and edges around a note, or the most connected notes when no centre is given. Answers 'what is this note part of', which a list of names cannot.",
+    inputSchemaJson: {
+      type: "object",
+      properties: {
+        center: { type: "string", description: "canonical name to build the neighbourhood around" },
+        depth: { type: "integer", minimum: 1, maximum: 3, description: "hops from the centre, default 2" },
+        limit: { type: "integer", minimum: 5, maximum: 300, description: "max nodes, default 80" },
+      },
+      additionalProperties: false,
+    },
+    inputSchemaZod: {
+      center: z.string().optional().describe("canonical name to build the neighbourhood around"),
+      depth: z.number().int().min(1).max(3).optional().describe("hops from the centre, default 2"),
+      limit: z.number().int().min(5).max(300).optional().describe("max nodes, default 80"),
+    },
+    run(args, ctx) {
+      const center = args.center != null ? String(args.center) : undefined;
+      const depth = typeof args.depth === "number" ? args.depth : 2;
+      const limit = typeof args.limit === "number" ? args.limit : 80;
+      if (center && !ctx.graph.nodes.has(center)) return refuse(`Note not found: ${center}`);
+
+      const degree = new Map<string, number>();
+      for (const e of ctx.graph.edges) {
+        if (!ctx.graph.nodes.has(e.from) || !ctx.graph.nodes.has(e.to) || e.from === e.to) continue;
+        degree.set(e.from, (degree.get(e.from) ?? 0) + 1);
+        degree.set(e.to, (degree.get(e.to) ?? 0) + 1);
+      }
+
+      // With a centre, the neighbourhood out to `depth`; without one, the notes
+      // that hold the vault together, which is the map a person opens first.
+      let chosen: string[];
+      if (center) {
+        const reached = [center, ...neighbors(ctx.graph, center, depth)];
+        chosen = reached
+          .sort((a, b) => (a === center ? -1 : b === center ? 1 : (degree.get(b) ?? 0) - (degree.get(a) ?? 0) || a.localeCompare(b)))
+          .slice(0, limit);
+      } else {
+        chosen = [...ctx.graph.nodes.keys()]
+          .sort((a, b) => (degree.get(b) ?? 0) - (degree.get(a) ?? 0) || a.localeCompare(b))
+          .slice(0, limit);
+      }
+      const inside = new Set(chosen);
+
+      const nodes = chosen.map((name) => {
+        const note = ctx.graph.nodes.get(name);
+        return {
+          name,
+          type: typeof note?.frontmatter.type === "string" ? note.frontmatter.type : undefined,
+          description: typeof note?.frontmatter.description === "string" ? note.frontmatter.description : "",
+          status: typeof note?.frontmatter.status === "string" ? note.frontmatter.status : undefined,
+          degree: degree.get(name) ?? 0,
+        };
+      });
+      // One edge per pair per kind, both ends inside the slice.
+      const seen = new Set<string>();
+      const edges: Array<{ from: string; to: string; kind: string }> = [];
+      for (const e of ctx.graph.edges) {
+        if (e.from === e.to || !inside.has(e.from) || !inside.has(e.to)) continue;
+        const key = `${[e.from, e.to].sort().join(" ")}|${e.kind}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        edges.push({ from: e.from, to: e.to, kind: e.kind });
+      }
+      return text({
+        center: center ?? null,
+        depth: center ? depth : null,
+        nodes,
+        edges,
+        total: ctx.graph.nodes.size,
+        truncated: nodes.length < (center ? 1 + neighbors(ctx.graph, center, depth).size : ctx.graph.nodes.size),
+      });
+    },
+  },
 ];
 
 const CONFIRM_KEY = "confirm-write";

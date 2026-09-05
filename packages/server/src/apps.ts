@@ -136,6 +136,20 @@ li {
 .name { font-weight: 600; word-break: break-word; }
 .meta { grid-column: 2; color: var(--app-muted); font-size: 12px; }
 .empty { color: var(--app-muted); padding: 24px 0; text-align: center; }
+.meta { color: var(--app-muted); font-size: 12px; }
+svg { width: 100%; height: auto; display: block; margin-top: 8px; }
+.edge { stroke: var(--app-line); stroke-width: 1; }
+.edge.supersedes, .edge.contradicts { stroke: var(--app-accent); stroke-dasharray: 3 3; }
+.node circle { fill: var(--app-card); stroke: var(--app-muted); stroke-width: 1.5; cursor: pointer; }
+.node:hover circle, .node:focus circle { stroke: var(--app-accent); stroke-width: 2.5; outline: none; }
+.node.is-center circle { fill: var(--app-accent); stroke: var(--app-accent); }
+.node.is-quarantine circle { stroke-dasharray: 2 2; }
+.node text { fill: var(--app-fg); font-size: 11px; pointer-events: none; }
+.card {
+  background: var(--app-card); border: 1px solid var(--app-line); border-radius: 8px;
+  padding: 10px 12px; margin-top: 8px; display: flex; flex-direction: column; gap: 4px;
+}
+.row { display: flex; gap: 8px; margin-top: 6px; }
 `;
 
 const page = (title: string, body: string, script: string) => `<!DOCTYPE html>
@@ -205,6 +219,138 @@ boot("brain_gaps");
 `,
 );
 
+const GRAPH_APP = page(
+  "What this note is part of",
+  `<div id="hint" class="meta">A vault is a graph. This is the part of it around one note.</div>
+<svg id="canvas" viewBox="0 0 800 520" role="img" aria-label="wikilink neighbourhood"></svg>
+<div id="detail"></div>`,
+  `
+let current = null;
+// A layout nobody can act on is one that moves between runs, so there is no
+// randomness here: positions start on a circle in name order and are relaxed by
+// a fixed number of steps. The same neighbourhood always draws the same way.
+function layout(nodes, edges, width, height) {
+  const n = nodes.length;
+  const k = Math.sqrt((width * height) / Math.max(n, 1)) * 0.6;
+  const index = new Map(nodes.map((node, i) => [node.name, i]));
+  const pos = nodes.map((node, i) => {
+    const angle = (2 * Math.PI * i) / Math.max(n, 1);
+    const radius = node.name === current ? 0 : Math.min(width, height) * 0.36;
+    return { x: width / 2 + Math.cos(angle) * radius, y: height / 2 + Math.sin(angle) * radius };
+  });
+  const links = edges
+    .map((e) => [index.get(e.from), index.get(e.to)])
+    .filter(([a, b]) => a !== undefined && b !== undefined);
+  let temperature = Math.min(width, height) / 8;
+  for (let step = 0; step < 220; step++) {
+    const disp = pos.map(() => ({ x: 0, y: 0 }));
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        let dx = pos[i].x - pos[j].x;
+        let dy = pos[i].y - pos[j].y;
+        let d = Math.hypot(dx, dy) || 0.01;
+        // Beyond a couple of ideal spacings a node says nothing about another,
+        // and summing every far pair is what inflates the whole drawing until
+        // it parks on the border: measured, 40 of 60 nodes clamped without this.
+        if (d > 2.5 * k) continue;
+        // Two notes at the same spot need a push in some direction; a fixed one
+        // keeps the drawing reproducible.
+        if (d < 0.02) { dx = (i - j) * 0.01; dy = 0.01; d = Math.hypot(dx, dy); }
+        const force = (k * k) / d;
+        disp[i].x += (dx / d) * force; disp[i].y += (dy / d) * force;
+        disp[j].x -= (dx / d) * force; disp[j].y -= (dy / d) * force;
+      }
+    }
+    for (const [a, b] of links) {
+      const dx = pos[a].x - pos[b].x;
+      const dy = pos[a].y - pos[b].y;
+      const d = Math.hypot(dx, dy) || 0.01;
+      const force = (d * d) / k;
+      disp[a].x -= (dx / d) * force; disp[a].y -= (dy / d) * force;
+      disp[b].x += (dx / d) * force; disp[b].y += (dy / d) * force;
+    }
+    for (let i = 0; i < n; i++) {
+      if (nodes[i].name === current) continue; // the centre stays in the middle
+      // A weak pull to the middle: without it repulsion alone parks every node
+      // on the border, which draws a ring of dots and no structure.
+      disp[i].x += (width / 2 - pos[i].x) * 0.06;
+      disp[i].y += (height / 2 - pos[i].y) * 0.06;
+      const d = Math.hypot(disp[i].x, disp[i].y) || 1;
+      pos[i].x += (disp[i].x / d) * Math.min(d, temperature);
+      pos[i].y += (disp[i].y / d) * Math.min(d, temperature);
+      pos[i].x = Math.max(24, Math.min(width - 24, pos[i].x));
+      pos[i].y = Math.max(24, Math.min(height - 24, pos[i].y));
+    }
+    temperature *= 0.975;
+  }
+  return pos;
+}
+function render(params) {
+  const data = payload(params);
+  const nodes = Array.isArray(data?.nodes) ? data.nodes : [];
+  const edges = Array.isArray(data?.edges) ? data.edges : [];
+  current = data?.center ?? null;
+  document.body.dataset.rendered = "1";
+  setStatus(
+    nodes.length === 0
+      ? "nothing to draw"
+      : (current ? current + " · " : "the most linked notes · ") + nodes.length + " of " + (data.total ?? nodes.length) + " notes, " + edges.length + " links",
+  );
+  const W = 800, H = 520;
+  const pos = layout(nodes, edges, W, H);
+  const at = new Map(nodes.map((node, i) => [node.name, pos[i]]));
+  const maxDegree = Math.max(1, ...nodes.map((node) => node.degree));
+  const parts = [];
+  for (const e of edges) {
+    const a = at.get(e.from), b = at.get(e.to);
+    if (!a || !b) continue;
+    parts.push('<line class="edge ' + esc(e.kind) + '" x1="' + a.x.toFixed(1) + '" y1="' + a.y.toFixed(1) + '" x2="' + b.x.toFixed(1) + '" y2="' + b.y.toFixed(1) + '"></line>');
+  }
+  for (const node of nodes) {
+    const p = at.get(node.name);
+    const r = 4 + 7 * Math.sqrt(node.degree / maxDegree);
+    const cls = "node" + (node.name === current ? " is-center" : "") + (node.status === "quarantine" ? " is-quarantine" : "");
+    parts.push(
+      '<g class="' + cls + '" data-name="' + esc(node.name) + '" tabindex="0">' +
+      '<circle cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="' + r.toFixed(1) + '"></circle>' +
+      '<title>' + esc(node.name) + (node.description ? " — " + esc(node.description) : "") + '</title>' +
+      (node.degree >= maxDegree / 3 || node.name === current
+        ? '<text x="' + (p.x + r + 3).toFixed(1) + '" y="' + (p.y + 4).toFixed(1) + '">' + esc(node.name.length > 26 ? node.name.slice(0, 25) + "…" : node.name) + '</text>'
+        : "") +
+      '</g>',
+    );
+  }
+  const canvas = document.getElementById("canvas");
+  canvas.innerHTML = parts.join("");
+  for (const g of canvas.querySelectorAll(".node")) {
+    g.addEventListener("click", () => select(g.dataset.name, nodes));
+    g.addEventListener("keydown", (e) => { if (e.key === "Enter") select(g.dataset.name, nodes); });
+  }
+  document.getElementById("detail").innerHTML = "";
+}
+function select(name, nodes) {
+  const node = nodes.find((x) => x.name === name);
+  document.getElementById("detail").innerHTML =
+    '<div class="card"><div class="name">' + esc(name) + '</div>' +
+    '<div class="meta">' + esc(node?.description ?? "") + '</div>' +
+    '<div class="meta">' + esc(node?.type ?? "note") + ' · ' + esc(node?.degree ?? 0) + ' links' + (node?.status ? ' · ' + esc(node.status) : '') + '</div>' +
+    '<div class="row"><button type="button" id="recenter">Centre on it</button>' +
+    '<button type="button" id="ask">Ask about it</button></div></div>';
+  document.getElementById("recenter").addEventListener("click", async () => {
+    setStatus("walking to " + name + "…");
+    try { render(await call("tools/call", { name: "brain_graph", arguments: { center: name } })); }
+    catch (err) { setStatus(err.message); }
+  });
+  // The one thing a page may hand back to the conversation: a question. Reading
+  // and writing stay with the tools, where the gate and the person are.
+  document.getElementById("ask").addEventListener("click", () => {
+    call("ui/message", { role: "user", content: { type: "text", text: "Read the note " + name + " and tell me what it says." } }).catch(() => {});
+  });
+}
+boot("brain_graph");
+`,
+);
+
 export const APP_RESOURCES: AppResource[] = [
   {
     uri: "ui://manent/quarantine",
@@ -219,6 +365,13 @@ export const APP_RESOURCES: AppResource[] = [
     description: "The questions the brain could not answer, by how often they were asked.",
     mimeType: APP_MIME_TYPE,
     html: GAPS_APP,
+  },
+  {
+    uri: "ui://manent/graph",
+    name: "graph explorer",
+    description: "The wikilink neighbourhood around a note: what it is part of, and what to open next.",
+    mimeType: APP_MIME_TYPE,
+    html: GRAPH_APP,
   },
 ];
 

@@ -72,13 +72,17 @@ try {
   ok("and resources alongside tools", !!discover.result?.capabilities?.resources);
 
   const resources = (await post(MASTER, { jsonrpc: "2.0", id: 2, method: "resources/list", params: { _meta: META } })).result?.resources ?? [];
-  ok("both apps are listed", resources.length === 2 && resources.every((r) => r.uri.startsWith("ui://")), JSON.stringify(resources.map((r) => r.uri)));
+  ok("every app is listed", resources.length === 3 && resources.every((r) => r.uri.startsWith("ui://")), JSON.stringify(resources.map((r) => r.uri)));
   ok("with the mime type the extension defines", resources.every((r) => r.mimeType === "text/html;profile=mcp-app"));
   ok("and no page in the listing", resources.every((r) => r.text === undefined && r.html === undefined));
 
   const tools = (await post(MASTER, { jsonrpc: "2.0", id: 3, method: "tools/list", params: { _meta: META } })).result?.tools ?? [];
   const linked = tools.filter((t) => t._meta?.ui?.resourceUri);
-  ok("exactly the two tools carry a ui resource", linked.map((t) => t.name).sort().join(",") === "brain_gaps,brain_quarantine", JSON.stringify(linked.map((t) => t.name)));
+  ok(
+    "exactly the tools with a page carry a ui resource",
+    linked.map((t) => t.name).sort().join(",") === "brain_gaps,brain_graph,brain_quarantine",
+    JSON.stringify(linked.map((t) => t.name)),
+  );
   ok(
     "every link points at a resource that exists",
     linked.every((t) => resources.some((r) => r.uri === t._meta.ui.resourceUri)),
@@ -96,7 +100,54 @@ try {
     ok(`${uri} loads nothing from anywhere`, !/<script[^>]+src=/i.test(page.text) && !/<link/i.test(page.text) && !/https?:\/\//.test(page.text));
     ok(`${uri} declares an empty csp, because it needs none`, Array.isArray(page._meta?.ui?.csp?.connectDomains) && page._meta.ui.csp.connectDomains.length === 0);
     ok(`${uri} escapes what it renders`, page.text.includes("&amp;") && page.text.includes("&lt;"));
+    // A page is shipped, not built: a syntax error in it would only be found by
+    // the person it broke in front of. Compiled here, never run.
+    const script = page.text.slice(page.text.lastIndexOf("<script>") + 8, page.text.lastIndexOf("</script>"));
+    let syntax = "";
+    try {
+      new Function(script);
+    } catch (err) {
+      syntax = err.message;
+    }
+    ok(`${uri} is valid javascript`, syntax === "", syntax);
   }
+  // The graph page's only real logic is where it puts the dots. Run it here on
+  // a ring: a NaN would draw an empty picture that every protocol assertion
+  // above would still call a pass.
+  {
+    const page = (await post(MASTER, { jsonrpc: "2.0", id: 6, method: "resources/read", params: { _meta: META, uri: "ui://manent/graph" } })).result.contents[0].text;
+    const src = page.slice(page.indexOf("function layout"), page.indexOf("function render"));
+    const layout = new Function("current", `${src}; return layout;`)(null);
+    // Three clusters loosely joined: the shape a vault actually has.
+    const nodes = [];
+    const edges = [];
+    for (let c = 0; c < 3; c++) {
+      for (let i = 0; i < 20; i++) {
+        const name = `c${c}-${i}`;
+        nodes.push({ name, degree: 3 });
+        if (i > 0) edges.push({ from: name, to: `c${c}-${i - 1}` });
+        if (i % 5 === 0) edges.push({ from: name, to: `c${c}-0` });
+      }
+      if (c > 0) edges.push({ from: `c${c}-0`, to: `c${c - 1}-0` });
+    }
+    const pos = layout(nodes, edges, 800, 520);
+    const index = new Map(nodes.map((n, i) => [n.name, i]));
+    const dist = (a, b) => Math.hypot(pos[a].x - pos[b].x, pos[a].y - pos[b].y);
+    ok("every node lands somewhere real", pos.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y)), JSON.stringify(pos.slice(0, 2)));
+    ok("and inside the canvas", pos.every((p) => p.x >= 0 && p.x <= 800 && p.y >= 0 && p.y <= 520));
+    ok("no two nodes sit on top of each other", new Set(pos.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`)).size === pos.length);
+    const again = layout(nodes, edges, 800, 520);
+    ok("the same neighbourhood draws the same way twice", JSON.stringify(again) === JSON.stringify(pos));
+
+    const clamped = pos.filter((p) => p.x <= 25 || p.x >= 775 || p.y <= 25 || p.y >= 495).length;
+    ok("the drawing is not a rim of dots on the border", clamped < nodes.length / 4, `${clamped}/${nodes.length} clamped`);
+    const mean = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
+    const linked = mean(edges.map((e) => dist(index.get(e.from), index.get(e.to))));
+    const anyPair = [];
+    for (let i = 0; i < nodes.length; i++) for (let j = i + 1; j < nodes.length; j++) anyPair.push(dist(i, j));
+    ok("linked notes end up near each other", linked < mean(anyPair) / 2, `linked ${linked.toFixed(0)} vs any pair ${mean(anyPair).toFixed(0)}`);
+  }
+
   const missing = await post(MASTER, { jsonrpc: "2.0", id: 5, method: "resources/read", params: { _meta: META, uri: "ui://manent/nope" } });
   ok("an unknown resource is an error", !!missing.error && missing.error.message.includes("Unknown resource"));
 
@@ -106,6 +157,16 @@ try {
   ok("with what a person decides on", queue.queue[0].author === "tech" && typeof queue.queue[0].ageDays === "number" && queue.queue[0].audience.includes("private"));
   const agentQueue = JSON.parse((await call(agents.tech.token, "brain_quarantine")).result.content[0].text);
   ok("an agent's queue is empty: quarantined notes are private", agentQueue.waiting === 0, JSON.stringify(agentQueue));
+
+  const whole = JSON.parse((await call(MASTER, "brain_graph")).result.content[0].text);
+  ok("without a centre the graph is the most linked notes", whole.center === null && whole.nodes.length === 2 && whole.total === 2, JSON.stringify(whole).slice(0, 160));
+  ok("nodes carry what the drawing needs", whole.nodes.every((n) => typeof n.degree === "number" && "type" in n));
+  const around = JSON.parse((await call(MASTER, "brain_graph", { center: "runbook", depth: 1 })).result.content[0].text);
+  ok("a centre gives its neighbourhood", around.center === "runbook" && around.nodes[0].name === "runbook", JSON.stringify(around).slice(0, 160));
+  const missingCenter = await call(MASTER, "brain_graph", { center: "mai-scritta" });
+  ok("an unknown centre is refused, not drawn empty", missingCenter.result?.isError === true && missingCenter.result.content[0].text.includes("Note not found"));
+  const agentGraph = JSON.parse((await call(agents.tech.token, "brain_graph")).result.content[0].text);
+  ok("an agent's graph holds only what it may read", agentGraph.nodes.every((n) => n.name !== "backup-window"), JSON.stringify(agentGraph.nodes.map((n) => n.name)));
 
   const agentGaps = await call(agents.tech.token, "brain_gaps");
   ok("the register is the owner's", agentGaps.result?.isError === true && agentGaps.result.content[0].text.includes("owner's"), JSON.stringify(agentGaps.result).slice(0, 140));
