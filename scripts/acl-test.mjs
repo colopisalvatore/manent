@@ -126,6 +126,33 @@ ok(
 ok("--strict-content makes them errors", (await lintVault(vault, { strictContent: true })).errors >= 2);
 ok("quarantine is a valid status, author and audience valid fields", !lint.findings.some((f) => f.rule === "schema" && f.path.startsWith("quarantine/")));
 
+// The perimeter holds on every note and leaks on the document that lists them:
+// an index carries the title and the description of what it points at.
+await writeFile(
+  join(vault, "INDEX.md"),
+  "---\nname: index-both\ndescription: indice del vault\ntype: index\naudience: [tech, product]\n---\n" +
+    "- [Deploy del server](memory/tech-note.md) — come si fa\n- [[private-note]]\n- [Menu](memory/product-note.md)\n",
+  "utf8",
+);
+await writeFile(
+  join(vault, "PRODUCT.md"),
+  "---\nname: index-product\ndescription: indice della vista prodotto\ntype: index\naudience: [product]\n---\n- [Menu](memory/product-note.md)\n- [Orari](memory/public-note.md)\n",
+  "utf8",
+);
+const leakLint = await lintVault(vault, { audiences: ["tech", "product"] });
+const leaks = leakLint.findings.filter((f) => f.rule === "audience-leak");
+ok(
+  "an index readable as product that names a tech-only note is reported",
+  leaks.some((f) => f.path === "INDEX.md" && f.message.includes('"product"') && f.message.includes("2 of 3") && f.message.includes("memory/tech-note.md")),
+  leaks.map((f) => `${f.path}: ${f.message.slice(0, 70)}`).join(" | "),
+);
+ok(
+  "the same index is reported for tech too — a private note is narrower than any label",
+  leaks.some((f) => f.path === "INDEX.md" && f.message.includes('"tech"') && f.message.includes("memory/private-note.md")),
+);
+ok("an index that only names notes its readers can open is clean", !leaks.some((f) => f.path === "PRODUCT.md"));
+ok("a vault without audience labels never triggers the rule", (await lintVault(join(vault, "quarantine"))).findings.every((f) => f.rule !== "audience-leak"));
+
 console.log("\n── audit ──");
 await ctx.close();
 const lines = (await readFile(auditPath, "utf8")).trim().split("\n").map((l) => JSON.parse(l));

@@ -140,6 +140,12 @@ vault's own, and `manent lint --audiences tech,business,product` closes the set:
 label is reported, and until fixed it makes a note *less* visible, never more, because no scope
 names it.
 
+**The index is a note too**, and it is where a per-note perimeter leaks. An index or a MOC
+carries the title and the one-line description of everything it points at, which for a memory
+note is most of the content: a reader who cannot open the target still gets the map of it. Lint
+reports it (`audience-leak`) — a document that summarizes others inherits the narrowest audience
+among them. An index serving two audiences **splits**; it does not widen.
+
 **Audit**: `--audit <file>` appends one JSONL line per tool call: timestamp, identity, tool,
 redacted arguments, result names, elapsed. Enough to reconstruct an incident; not enough to
 reconstruct a customer.
@@ -431,7 +437,8 @@ manent lint <vault> --strict-content --audiences tech,business,product   # what 
 ```
 
 Beyond schema, links, duplicates and orphans, lint reports **personal data** in a note, text that
-**reads as an instruction to a model**, and **audience labels** outside the vault's set. They are
+**reads as an instruction to a model**, **audience labels** outside the vault's set, and an
+**index that names notes its own readers cannot open**. They are
 warnings for a person and, with `--strict-content`, errors for a pipeline. Run the strict form as
 a pre-commit hook or in CI on the brain repository: a note that fails it never lands in the
 shared branch, which is the only place the server reads from.
@@ -611,7 +618,7 @@ Done, in the order it was built:
 - [x] **Write path behind approval**: `resultType: "input_required"` on 2026-07-28, fingerprinted retry
 - [x] **Vault hot reload**: watch, coalesce, re-embed only what changed
 - [x] `brain_feedback`: "there, but wrong", filed next to the question
-- [x] Lint gate for CI: `pii`, `injection`, `audience-unknown`, `--strict-content`
+- [x] Lint gate for CI: `pii`, `injection`, `audience-unknown`, `audience-leak`, `--strict-content`
 - [x] **Promotion tooling**: `manent promote`: out of quarantine with status, audience, folder and
       a commit message in one move; a review queue of quarantined notes by age and author
 - [x] **GitHub Actions**: build, every test, the lint gate and the retrieval gate on a public

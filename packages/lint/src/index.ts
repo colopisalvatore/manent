@@ -1,6 +1,7 @@
 import {
   buildGraph,
   buildLinkIndex,
+  canRead,
   loadVault,
   noteAudiences,
   noteName,
@@ -8,7 +9,8 @@ import {
   scanInjection,
   scanPii,
 } from "@manent/core";
-import { noteBaseSchema, RESERVED_AUDIENCES } from "@manent/spec";
+import type { LinkIndex, Note } from "@manent/core";
+import { AUDIENCE_PRIVATE, AUDIENCE_PUBLIC, noteBaseSchema, RESERVED_AUDIENCES } from "@manent/spec";
 import Ajv2020Module from "ajv/dist/2020.js";
 import addFormatsModule from "ajv-formats";
 
@@ -195,6 +197,28 @@ export async function lintVault(root: string, opts: LintOptions = {}): Promise<L
       }
     }
 
+    // An index is a note like any other, and it is where a per-note perimeter
+    // leaks: its lines carry the title and the one-line description of what
+    // they point at, which for a memory note is most of the content. A reader
+    // who cannot open the target still gets the map of it.
+    if (fm.type === "index" || fm.type === "moc") {
+      const targets = listedNotes(n, linkIndex);
+      for (const label of noteAudiences(n)) {
+        if (label === AUDIENCE_PRIVATE || label === AUDIENCE_PUBLIC) continue;
+        const unreadable = targets.filter((t) => !canRead([label], t));
+        if (unreadable.length === 0) continue;
+        findings.push({
+          rule: "audience-leak",
+          severity: "warning",
+          path: n.relPath,
+          message:
+            `readable as "${label}" but names ${unreadable.length} of ${targets.length} notes that "${label}" cannot open ` +
+            `(e.g. ${unreadable.slice(0, 3).map((t) => t.relPath).join(", ")}) — ` +
+            `a note that summarizes others inherits the narrowest audience among them; split the index instead of widening it`,
+        });
+      }
+    }
+
     if (
       !inEdges.has(name) &&
       !outEdges.has(name) &&
@@ -218,6 +242,23 @@ export async function lintVault(root: string, opts: LintOptions = {}): Promise<L
     infos: count("info"),
     notes: notes.length,
   };
+}
+
+/** `[Titolo](memory/foo.md)` — an index lists its notes as often in Markdown as in wikilinks. */
+const MD_LINK_RE = /\]\(([^)\s]+?\.(?:md|markdown))(?:#[^)]*)?\)/gi;
+
+/** The notes a document names, whichever link syntax it uses. Self-links dropped. */
+function listedNotes(note: Note, index: LinkIndex): Note[] {
+  const out = new Map<string, Note>();
+  const add = (target: string) => {
+    const name = resolveLink(index, target, note.relPath);
+    if (!name) return;
+    const hit = index.byName.get(name);
+    if (hit && hit.relPath !== note.relPath) out.set(hit.relPath, hit);
+  };
+  for (const target of note.links) add(target);
+  for (const m of note.body.matchAll(MD_LINK_RE)) add(m[1]);
+  return [...out.values()];
 }
 
 /** YAML parses unquoted dates as Date objects; the schema wants YYYY-MM-DD strings. */
