@@ -177,6 +177,27 @@ otherwise. When they are on:
    handshake eras, clients without the elicitation capability) fall through: the owner's write
    goes straight through as before, an agent's goes to quarantine.
 
+### Every write is a commit: `--git`
+
+The principle above — git as the audit backbone, every memory write a commit — was, until
+`--git`, kept by a person: the one who ran `manent promote --commit` on their own machine. A brain
+that lives on a server and is written through MCP has no such person, and what an agent wrote was
+a file nobody had committed: gone with the next checkout, sync or disk.
+
+```
+manent serve <vault> --writable --git             # each write is committed, authored by its identity
+manent serve <vault> --writable --git-push        # …and pushed to origin, fast-forward only
+```
+
+The **author** of the commit is the identity that wrote (`tech <tech@manent>`, `owner <owner@manent>`),
+the **committer** is whoever runs the server — the repository's own `user.name`, required at
+startup. So `git log --author=tech` answers "what did tech write this week", and a quarantine write
+is a commit whose message says it waits for promotion. A write that changed nothing commits
+nothing. A push finds the remote moved on — someone committed elsewhere — and reports it instead
+of forcing; the next push after a `pull --rebase` goes through. A failed commit never undoes a
+write that reached the disk: it is reported to the caller, the audit and stderr, and the next
+commit sweeps the file up. `npm run test:git` is the invariant: nothing untracked, ever.
+
 ## Promotion: the review queue
 
 Quarantine is only half a design: something has to take notes out of it, and if that something is
@@ -619,6 +640,8 @@ Done, in the order it was built:
 - [x] **Vault hot reload**: watch, coalesce, re-embed only what changed
 - [x] `brain_feedback`: "there, but wrong", filed next to the question
 - [x] Lint gate for CI: `pii`, `injection`, `audience-unknown`, `audience-leak`, `--strict-content`
+- [x] **`--git`**: every write is a commit authored by its identity, committed by the server's user;
+      `--git-push` pushes fast-forward only and reports a remote that moved on instead of forcing
 - [x] **Promotion tooling**: `manent promote`: out of quarantine with status, audience, folder and
       a commit message in one move; a review queue of quarantined notes by age and author
 - [x] **GitHub Actions**: build, every test, the lint gate and the retrieval gate on a public

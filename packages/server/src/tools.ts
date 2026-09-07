@@ -647,9 +647,34 @@ async function runWrite(ctx: BrainContext, args: Record<string, unknown>, call?:
   try {
     const res = await writeNote(ctx.root, { name, dir, type, description, body, mode, frontmatter: stamp });
     await ctx.applyWrite(res.note);
+
+    // Every memory write is a commit: authored by the identity, committed by
+    // whoever runs the server. A failed commit does not undo a write that
+    // reached the disk; it is reported to the caller, the audit and stderr,
+    // and the next commit sweeps the file up — nothing stays untracked twice.
+    let git: Record<string, unknown> | undefined;
+    if (ctx.git) {
+      const verb = mode ?? "create";
+      const today = new Date().toISOString().slice(0, 10);
+      const subject = `${verb}(${name}): by ${id.name}`;
+      const detail =
+        `${res.created ? "Written" : "Updated"} by ${id.name} on ${today} via brain_${verb === "append" ? "append" : "write"}, at ${res.relPath}.` +
+        (stamp.status ? `\nstatus: ${stamp.status}, audience: private — waiting for a person to promote it.` : "");
+      git = await ctx.git.commit([res.relPath], id.name, subject, detail).catch((err: Error) => {
+        console.error(`[manent] git commit failed for ${res.relPath}: ${err.message}`);
+        return { error: err.message };
+      });
+    }
     return {
-      ...text({ ok: true, relPath: res.relPath, created: res.created, bytes: res.note.body.length, ...(stamp.status ? { status: stamp.status } : {}) }),
-      audit: { relPath: res.relPath, created: res.created },
+      ...text({
+        ok: true,
+        relPath: res.relPath,
+        created: res.created,
+        bytes: res.note.body.length,
+        ...(stamp.status ? { status: stamp.status } : {}),
+        ...(git ? { git } : {}),
+      }),
+      audit: { relPath: res.relPath, created: res.created, ...(git ? { git } : {}) },
     };
   } catch (err) {
     if (err instanceof WriteRefused) return refuse(err.message);

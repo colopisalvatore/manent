@@ -30,6 +30,12 @@ manent promote <local vault>                    # what is waiting, oldest first
 manent promote <local vault> --note <name> --audience tech --to memory --commit
 ```
 
+Or skip the harvest: with `--git` the server commits every write as it lands, authored by the
+identity that made it, and with `--git-push` pushes it fast-forward to the remote. Then the vault
+on the server *is* a clone like any other, promotion can run there (`manent promote --commit`),
+and the layout above inverts — the server publishes, the laptop pulls. That is the layout for a
+brain that is written through MCP rather than in an editor; this directory describes the other.
+
 ## The server
 
 ```

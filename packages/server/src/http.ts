@@ -1,3 +1,4 @@
+import type { GitOptions } from "./git.js";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import { loadBrainContext, type GapsOptions, type RetrieverName } from "./context.js";
 import { identityForToken, loadAgents, OWNER, stripToken, type Identity } from "./identity.js";
@@ -30,6 +31,8 @@ export interface HttpOptions {
   agents?: string;
   /** append one JSONL line per tool call */
   audit?: string;
+  /** commit every write, authored by its identity; optionally push, fast-forward only */
+  git?: GitOptions;
   /** re-index on edits to the vault */
   watch?: boolean;
 }
@@ -81,6 +84,7 @@ export async function serveHttp(root: string, opts: HttpOptions): Promise<Server
     writable: opts.writable,
     gaps: opts.gaps,
     audit: opts.audit,
+    git: opts.git,
     watch: opts.watch,
   });
   const pinned = opts.era ?? "auto";

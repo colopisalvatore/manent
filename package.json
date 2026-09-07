@@ -34,7 +34,8 @@
     "test:promote": "node scripts/promote-test.mjs",
     "test:curate": "node scripts/curate-test.mjs",
     "test:tasks": "node scripts/tasks-test.mjs",
-    "test:apps": "node scripts/apps-test.mjs"
+    "test:apps": "node scripts/apps-test.mjs",
+    "test:git": "node scripts/git-test.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",

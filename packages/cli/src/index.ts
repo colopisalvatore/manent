@@ -113,6 +113,9 @@ program
   .option("--gaps-threshold <cosine>", "similarity above which two questions are the same gap (default 0.9)")
   .option("--agents <file>", "JSON of agent identities for --http: name → {token, read: [audiences], write: dir}")
   .option("--audit <path>", "append one JSONL line per tool call, with the calling identity")
+  .option("--git", "commit every write in the vault's git repository, authored by the identity that made it (the vault must be a repository)")
+  .option("--git-push", "after each commit, push to the remote — fast-forward only, never with force (implies --git)")
+  .option("--git-remote <name>", "the remote --git-push pushes to", "origin")
   .option("--no-watch", "do not re-index when notes change on disk (on by default)")
   .action(
     async (
@@ -129,6 +132,9 @@ program
         gapsThreshold?: string;
         agents?: string;
         audit?: string;
+        git?: boolean;
+        gitPush?: boolean;
+        gitRemote: string;
         watch: boolean;
       },
     ) => {
@@ -149,10 +155,15 @@ program
       if (gaps) console.error(`[manent] gap register: ${gaps.path}`);
       const audit = opts.audit ? resolve(opts.audit) : undefined;
       if (audit) console.error(`[manent] audit log: ${audit}`);
+      const git = opts.git || opts.gitPush ? { push: !!opts.gitPush, remote: opts.gitRemote } : undefined;
+      if (git) {
+        if (!writable) console.error("[manent] --git without --writable: there will be nothing to commit");
+        console.error(`[manent] git: every write is a commit${git.push ? `, pushed to ${git.remote} (fast-forward only)` : ""}`);
+      }
 
       if (!opts.http) {
         if (opts.agents) console.error("[manent] --agents applies to --http only: stdio is the owner's own session");
-        const ctx = await serveStdio(root, { retriever, model: opts.model, writable, gaps, audit, watch: opts.watch });
+        const ctx = await serveStdio(root, { retriever, model: opts.model, writable, gaps, audit, git, watch: opts.watch });
         for (const sig of ["SIGINT", "SIGTERM"] as const) process.on(sig, () => void ctx.close().finally(() => process.exit(0)));
         return;
       }
@@ -173,6 +184,7 @@ program
         gaps,
         agents: opts.agents ? resolve(opts.agents) : undefined,
         audit,
+        git,
         watch: opts.watch,
       });
     },

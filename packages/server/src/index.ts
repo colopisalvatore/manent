@@ -57,3 +57,4 @@ export {
 
 export { serveHttp, type HttpOptions } from "./http.js";
 export { verifyAccessToken, subjectOfAccessToken, mintAccessToken, handleOAuth, type OAuthOptions } from "./oauth.js";
+export { VaultGit, type GitOptions, type CommitOutcome, type PushOutcome } from "./git.js";
