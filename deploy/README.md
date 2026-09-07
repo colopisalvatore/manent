@@ -18,6 +18,18 @@ and the audit log are not, because they record what was asked and by whom, which
 **Back up `/var/lib/manent` separately from the vault**, and remember that it is the only part of
 the deployment holding questions.
 
+There is a third thing that a clone does not restore, and it is easy to miss: **`quarantine/` on
+the server**. What an agent writes lands there untracked — it is a proposal, not vault content —
+so it exists only on that disk until a person promotes it, and promotion is a commit made where
+the vault is edited, not on the server. Two consequences: `post-receive` must not `clean` it away
+(the hook here excludes it), and it should be pulled down before it grows:
+
+```
+rsync -av --remove-source-files root@server:/srv/brain/quarantine/ <local vault>/quarantine/
+manent promote <local vault>                    # what is waiting, oldest first
+manent promote <local vault> --note <name> --audience tech --to memory --commit
+```
+
 ## The server
 
 ```

@@ -19,6 +19,12 @@ while read -r _oldrev newrev refname; do
 
   git --git-dir="$REPO" --work-tree="$VAULT" checkout -f "$BRANCH"
   # Files deleted in the push are not removed by `checkout -f`.
-  git --git-dir="$REPO" --work-tree="$VAULT" clean -fd -e .manent -e secrets
+  #
+  # `quarantine` is excluded for the same reason `secrets` is, and it is the
+  # less obvious of the two: what an agent writes lands there untracked, so a
+  # plain clean would delete the review queue on the next deploy — the notes
+  # would be gone before anyone had the chance to promote them. The queue is
+  # emptied by `manent promote`, which is a commit, never by a deploy.
+  git --git-dir="$REPO" --work-tree="$VAULT" clean -fd -e .manent -e secrets -e quarantine
   echo "manent: $VAULT is now at $(git --git-dir="$REPO" rev-parse --short "$newrev") — the watcher re-indexes it"
 done
