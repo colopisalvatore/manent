@@ -25,6 +25,8 @@ export interface HttpOptions {
   model?: string;
   /** allow the write tools; off by default — this server is network-reachable */
   writable?: boolean;
+  /** ask the person to confirm each write when the client can carry the question; on by default */
+  confirmWrites?: boolean;
   /** record searches into a gap register */
   gaps?: GapsOptions;
   /** JSON file of agent identities: name → {token, read, write} */
@@ -82,6 +84,7 @@ export async function serveHttp(root: string, opts: HttpOptions): Promise<Server
     retriever: opts.retriever,
     model: opts.model,
     writable: opts.writable,
+    confirmWrites: opts.confirmWrites,
     gaps: opts.gaps,
     audit: opts.audit,
     git: opts.git,

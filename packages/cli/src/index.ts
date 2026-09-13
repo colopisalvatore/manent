@@ -109,6 +109,10 @@ program
   .option("--retriever <name>", "ranking: bm25 (default) | fused (best, needs embedding model) | dense | hybrid", "bm25")
   .option("--model <id>", "embedding model for dense/fused")
   .option("--writable", "enable the write tools (brain_write, brain_append) — off by default")
+  .option(
+    "--no-confirm",
+    "do not ask the person to confirm a write (for unattended callers: a headless agent answers its own elicitation with cancel, which refuses every write)",
+  )
   .option("--gaps <path>", "record every search into a gap register (sqlite file outside the vault; or env MANENT_GAPS)")
   .option("--gaps-threshold <cosine>", "similarity above which two questions are the same gap (default 0.9)")
   .option("--agents <file>", "JSON of agent identities for --http: name → {token, read: [audiences], write: dir}")
@@ -128,6 +132,7 @@ program
         retriever: string;
         model?: string;
         writable?: boolean;
+        confirm: boolean;
         gaps?: string;
         gapsThreshold?: string;
         agents?: string;
@@ -151,6 +156,11 @@ program
         // Said out loud on purpose: an operator who did not mean this should see it.
         console.error(`[manent] WRITABLE — brain_write and brain_append can modify ${root}`);
       }
+      const confirmWrites = opts.confirm !== false;
+      if (!confirmWrites) {
+        if (!writable) console.error("[manent] --no-confirm without --writable: there is no write to confirm");
+        else console.error("[manent] --no-confirm — a write lands without anyone being asked");
+      }
       const gaps = gapsFrom(opts);
       if (gaps) console.error(`[manent] gap register: ${gaps.path}`);
       const audit = opts.audit ? resolve(opts.audit) : undefined;
@@ -163,7 +173,7 @@ program
 
       if (!opts.http) {
         if (opts.agents) console.error("[manent] --agents applies to --http only: stdio is the owner's own session");
-        const ctx = await serveStdio(root, { retriever, model: opts.model, writable, gaps, audit, git, watch: opts.watch });
+        const ctx = await serveStdio(root, { retriever, model: opts.model, writable, confirmWrites, gaps, audit, git, watch: opts.watch });
         for (const sig of ["SIGINT", "SIGTERM"] as const) process.on(sig, () => void ctx.close().finally(() => process.exit(0)));
         return;
       }
@@ -181,6 +191,7 @@ program
         retriever,
         model: opts.model,
         writable,
+        confirmWrites,
         gaps,
         agents: opts.agents ? resolve(opts.agents) : undefined,
         audit,

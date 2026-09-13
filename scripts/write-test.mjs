@@ -104,6 +104,37 @@ ok(
   (await call(rw, "brain_search", { query: "nuovo corpo", k: 3 })).content[0].text.includes("nota-test"),
 );
 
+// A client that says it can ask the person is asked; --no-confirm removes the
+// question, for a caller nobody is watching.
+console.log("\n── the confirmation ──");
+const elicits = { clientCapabilities: { elicitation: {} } };
+const proposal = { name: "nota-confermata", description: "d", type: "reference", body: "b" };
+const asked = await findTool("brain_write").run(proposal, rw, elicits);
+ok("a client that can ask gets the form", !!asked.inputRequired);
+ok("nothing is written while it waits", (await call(rw, "brain_read", { name: "nota-confermata" })).isError === true);
+const declined = await findTool("brain_write").run(proposal, rw, {
+  ...elicits,
+  requestState: asked.inputRequired.requestState,
+  inputResponses: { "confirm-write": { action: "cancel" } },
+});
+ok("cancel writes nothing", declined.audit?.declined === true);
+const accepted = await findTool("brain_write").run(proposal, rw, {
+  ...elicits,
+  requestState: asked.inputRequired.requestState,
+  inputResponses: { "confirm-write": { action: "accept", content: { confirm: true } } },
+});
+ok("accept writes", !accepted.isError && !accepted.inputRequired);
+
+const unattended = await loadBrainContext(root, { writable: true, confirmWrites: false });
+const straight = await findTool("brain_write").run(
+  { name: "nota-senza-conferma", description: "d", type: "reference", body: "b" },
+  unattended,
+  elicits,
+);
+ok("--no-confirm: the same client is not asked", !straight.inputRequired && !straight.isError);
+ok("--no-confirm: the note is on disk", !(await call(unattended, "brain_read", { name: "nota-senza-conferma" })).isError);
+await unattended.close();
+
 await rm(root, { recursive: true, force: true });
 console.log(failures === 0 ? "\nall write tests passed" : `\n${failures} FAILURES`);
 process.exitCode = failures === 0 ? 0 : 1;
