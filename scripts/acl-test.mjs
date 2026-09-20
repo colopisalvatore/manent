@@ -110,6 +110,17 @@ const accepted = await call(ctx, "brain_write", args, { clientCapabilities: caps
 ok("accept writes", !accepted.isError && !accepted.inputRequired && existsSync(join(vault, "memory/approved.md")));
 const direct = await call(ctx, "brain_write", { ...args, name: "direct" }, { clientCapabilities: {} });
 ok("without the capability the write goes straight through", !direct.inputRequired && existsSync(join(vault, "memory/direct.md")));
+const askedAgent = await call(ctx.forIdentity(tech), "brain_write", { ...args, name: "agent-asked" }, { clientCapabilities: caps });
+ok("an agent is asked by default", !!askedAgent.inputRequired && !existsSync(join(vault, "quarantine/tech/agent-asked.md")));
+const trusted = { ...tech, name: "tech-trusted", confirm: false };
+const quiet = await call(ctx.forIdentity(trusted), "brain_write", { ...args, name: "agent-quiet" }, { clientCapabilities: caps });
+ok(
+  "an agent with confirm:false is not asked, and still lands in quarantine",
+  !quiet.isError && !quiet.inputRequired && existsSync(join(vault, "quarantine/tech/agent-quiet.md")) && !existsSync(join(vault, "memory/agent-quiet.md")),
+  quiet.content?.[0]?.text,
+);
+const ownerConfirmFalse = await call(ctx, "brain_write", { ...args, name: "owner-asked" }, { clientCapabilities: caps });
+ok("the owner is always asked", !!ownerConfirmFalse.inputRequired);
 
 console.log("\n── lint gate ──");
 await writeFile(

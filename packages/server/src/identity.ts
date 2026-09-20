@@ -20,6 +20,13 @@ export interface Identity {
   read: string[];
   /** vault-relative directory this identity may write into; unset = read-only */
   writeDir?: string;
+  /**
+   * `false` = an agent's write is not put to the person on the call: its
+   * quarantine is the approval, since nothing it writes is visible or trusted
+   * until `manent promote`. Unset or `true` = ask, when the client can be asked.
+   * The owner is always asked.
+   */
+  confirm?: boolean;
 }
 
 export const OWNER: Identity = Object.freeze({ name: "owner", owner: true, read: ["*"] });
@@ -29,6 +36,7 @@ export interface AgentSpec {
   token: string;
   read?: string[];
   write?: string;
+  confirm?: boolean;
 }
 
 const NAME_RE = /^[a-z0-9][a-z0-9_-]*$/;
@@ -70,7 +78,20 @@ export async function loadAgents(file: string): Promise<Map<string, Identity & {
     if (spec.write !== undefined && (typeof spec.write !== "string" || spec.write.trim() === "")) {
       throw new Error(`${file}: agent "${name}": write must be a vault-relative directory`);
     }
-    out.set(name, { name, owner: false, read, writeDir: spec.write?.replace(/\\/g, "/").replace(/^\/+|\/+$/g, ""), token: spec.token });
+    if (spec.confirm !== undefined && typeof spec.confirm !== "boolean") {
+      throw new Error(`${file}: agent "${name}": confirm must be true or false`);
+    }
+    if (spec.confirm === false && spec.write === undefined) {
+      throw new Error(`${file}: agent "${name}": confirm: false only means something for an agent that may write`);
+    }
+    out.set(name, {
+      name,
+      owner: false,
+      read,
+      writeDir: spec.write?.replace(/\\/g, "/").replace(/^\/+|\/+$/g, ""),
+      ...(spec.confirm !== undefined ? { confirm: spec.confirm } : {}),
+      token: spec.token,
+    });
   }
   return out;
 }

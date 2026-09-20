@@ -175,7 +175,11 @@ otherwise. When they are on:
    fingerprint of what was proposed, so an altered retry is asked again instead of trusted. The agent
    proposes, the person confirms, in the standard's own primitive. Clients that cannot ask (the
    handshake eras, clients without the elicitation capability) fall through: the owner's write
-   goes straight through as before, an agent's goes to quarantine.
+   goes straight through as before, an agent's goes to quarantine. A client that advertises the
+   capability but has nobody to answer — an unattended agent runtime — is declined on every write;
+   give that agent `"confirm": false` in the agents file and the server stops asking it: its note
+   still lands in quarantine, private, and `manent promote` stays the person's approval. The owner
+   is always asked.
 
 ### Every write is a commit: `--git`
 

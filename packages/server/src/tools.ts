@@ -606,8 +606,11 @@ async function runWrite(ctx: BrainContext, args: Record<string, unknown>, call?:
   // retries the same call carrying the answer. Stateless on this side — the
   // request state is a fingerprint of what was proposed, so an altered retry
   // is asked again rather than trusted.
+  // An agent configured with `confirm: false` skips the form: its note lands in
+  // quarantine, private, and only `manent promote` makes it anything more.
   const elicitation = call?.clientCapabilities?.elicitation;
-  if (elicitation && typeof elicitation === "object") {
+  const asked = !(id.confirm === false && !id.owner);
+  if (asked && elicitation && typeof elicitation === "object") {
     const state = fingerprint({ name, dir, mode, type, description, body, agent: id.name });
     const answer = call?.inputResponses?.[CONFIRM_KEY];
     if (!answer || call?.requestState !== state) {
