@@ -1,5 +1,6 @@
 import type { Note } from "@manent/core";
-import { bm25Candidates, buildSearchIndex } from "./bm25.js";
+import type MiniSearch from "minisearch";
+import { bm25Candidates, buildSearchIndex, type SearchDoc } from "./bm25.js";
 import type { DenseIndex, DenseSearchOptions } from "./dense.js";
 import { denseRetriever } from "./dense.js";
 import { reciprocalRankFusion, type RankedList } from "./fusion.js";
@@ -14,6 +15,8 @@ export interface FusedOptions {
   lexicalWeight?: number;
   /** how passage scores collapse per note (see DenseSearchOptions) */
   dense?: DenseSearchOptions;
+  /** a lexical index already built for these notes, so swapping the dense side does not rebuild it */
+  lexical?: MiniSearch<SearchDoc>;
 }
 
 /**
@@ -27,7 +30,7 @@ const DEFAULTS = {
   depth: 30,
   denseWeight: 2,
   lexicalWeight: 1,
-} satisfies Omit<Required<FusedOptions>, "dense">;
+} satisfies Omit<Required<FusedOptions>, "dense" | "lexical">;
 
 /**
  * Lexical + dense, fused with Reciprocal Rank Fusion.
@@ -40,7 +43,7 @@ const DEFAULTS = {
  */
 export function fusedRetriever(notes: Note[], dense: DenseIndex, options: FusedOptions = {}): Retriever {
   const opts = { ...DEFAULTS, ...options };
-  const index = buildSearchIndex(notes);
+  const index = options.lexical ?? buildSearchIndex(notes);
   const denseR = denseRetriever(dense, options.dense);
 
   return {
