@@ -306,15 +306,18 @@ export async function loadBrainContext(
     async applyWrite(note) {
       // Mutated in place: the retrievers close over this array.
       const at = notes.findIndex((n) => n.relPath === note.relPath);
+      const previousName = at >= 0 ? noteName(notes[at]) : undefined;
       if (at >= 0) notes[at] = note;
       else notes.push(note);
       generation++;
       ctx.graph = buildGraph(notes);
-      // Another file already answering to this name keeps the index's slot
-      // (first one wins, as in a full build): rebuild rather than guess.
+      // Rebuild rather than guess when an upsert would leave the index wrong:
+      // the file used to answer to another name (that entry would linger), or
+      // another file already answers to this one (first one wins, as in a full build).
       const name = noteName(note);
+      const renamed = previousName !== undefined && previousName !== name;
       const clash = notes.some((n) => n !== note && n.relPath !== note.relPath && noteName(n) === name);
-      if (lexical && !clash) upsertSearchDoc(lexical, note);
+      if (lexical && !renamed && !clash) upsertSearchDoc(lexical, note);
       else lexical = undefined;
       ctx.retriever = rank(notes, ctx.graph);
       ctx.version++;

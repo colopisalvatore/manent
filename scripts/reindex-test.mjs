@@ -83,11 +83,26 @@ if (process.argv[2] === "churn") {
   const fs = createRequire(import.meta.url)("node:fs");
   const realWriteFile = fs.promises.writeFile;
   let saves = 0;
-  fs.promises.writeFile = async (path, data, ...rest) => {
-    if (++saves === 1) return realWriteFile(path, data, ...rest);
-    fs.writeFileSync(path, String(data).slice(0, Math.floor(String(data).length / 2)));
+  const half = (data) => String(data).slice(0, Math.floor(String(data).length / 2));
+  const stall = async () => {
     console.log("midwrite");
     await new Promise(() => {});
+  };
+  // Both ways a file gets written: by path, and through an open handle.
+  fs.promises.writeFile = async (path, data, ...rest) => {
+    if (++saves === 1) return realWriteFile(path, data, ...rest);
+    fs.writeFileSync(path, half(data));
+    await stall();
+  };
+  const probe = await fs.promises.open(join(root, ".probe"), "w");
+  const handleProto = Object.getPrototypeOf(probe);
+  await probe.close();
+  fs.unlinkSync(join(root, ".probe"));
+  const realHandleWrite = handleProto.writeFile;
+  handleProto.writeFile = async function (data, ...rest) {
+    if (++saves === 1) return realHandleWrite.call(this, data, ...rest);
+    fs.writeSync(this.fd, half(data));
+    await stall();
   };
   syncBuiltinESMExports();
   const { buildDenseIndex } = await import("../packages/retrieval/dist/index.js");
@@ -213,6 +228,14 @@ console.log("\n── write ──");
   const edited = await ctx.reload();
   await ctx.settled?.();
   ok("an outside edit reloads one note and re-embeds one", edited.changed === 1 && model.passages - before === 1, `~${edited.changed}, ${model.passages - before} passages`);
+
+  // A file rewritten under another name must not leave its old name behind.
+  const old = ctx.notes.find((n) => n.relPath === "memory/nota-5.md");
+  await ctx.applyWrite({ ...old, body: "ricetta con zafferano" });
+  await ctx.applyWrite({ ...old, frontmatter: { ...old.frontmatter, name: "rinominata", description: "nota rinominata" }, body: "altro" });
+  await ctx.settled();
+  const names = (await ctx.retriever.search("zafferano", 100)).map((h) => h.name);
+  ok("a note renamed in place leaves no stale entry behind", !names.includes("nota-5"), names.includes("nota-5") ? "nota-5 still served for its old text" : "");
 
   await ctx.close();
   await rm(root, { recursive: true, force: true });
