@@ -60,21 +60,42 @@ export function buildSearchIndex(notes: Note[]): MiniSearch<SearchDoc> {
     const id = noteName(n);
     if (seen.has(id)) continue; // duplicate-name is a lint error; never crash on it
     seen.add(id);
-    docs.push({
-      id,
-      slugWords: slugWords(id),
-      description: String(n.frontmatter.description ?? ""),
-      body: n.body,
-      relPath: n.relPath,
-    });
+    docs.push(searchDoc(n));
   }
   ms.addAll(docs);
   return ms;
 }
 
-/** Lexical baseline: MiniSearch's BM25 over slug, description and body. */
-export function bm25Retriever(notes: Note[]): Retriever {
-  const index = buildSearchIndex(notes);
+/** What a note becomes in the lexical index. */
+export function searchDoc(n: Note): SearchDoc {
+  const id = noteName(n);
+  return {
+    id,
+    slugWords: slugWords(id),
+    description: String(n.frontmatter.description ?? ""),
+    body: n.body,
+    relPath: n.relPath,
+  };
+}
+
+/**
+ * Folds one written note into an index built by `buildSearchIndex`, in place.
+ * Rebuilding the index is linear in the vault — about a second of blocked event
+ * loop on a 1,300-note vault with one 470 KB note — and a server that rebuilt
+ * it on every write stopped answering while several agents wrote at once.
+ */
+export function upsertSearchDoc(index: MiniSearch<SearchDoc>, note: Note): void {
+  const doc = searchDoc(note);
+  if (index.has(doc.id)) index.replace(doc);
+  else index.add(doc);
+}
+
+/**
+ * Lexical baseline: MiniSearch's BM25 over slug, description and body.
+ * Pass `index` to rank over one already built for these notes.
+ */
+export function bm25Retriever(notes: Note[], prebuilt?: MiniSearch<SearchDoc>): Retriever {
+  const index = prebuilt ?? buildSearchIndex(notes);
   return {
     name: "bm25",
     search(query, k = 8) {
