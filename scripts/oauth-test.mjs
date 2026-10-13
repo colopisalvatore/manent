@@ -126,6 +126,13 @@ try {
   // 10. disallowed redirect_uri rejected
   const evil = await fetch(`${BASE}/authorize?` + new URLSearchParams({ ...Object.fromEntries(q), redirect_uri: "https://evil.example/cb" }));
   ok("disallowed redirect_uri → 400", evil.status === 400);
+
+  // 11. the shipped connector hosts reach the consent page — ChatGPT's redirect is
+  // https://chatgpt.com/connector/oauth/<id>, so chatgpt.com has to be allowed.
+  for (const host of ["claude.ai", "chatgpt.com"]) {
+    const r = await fetch(`${BASE}/authorize?` + new URLSearchParams({ ...Object.fromEntries(q), redirect_uri: `https://${host}/connector/oauth/abc` }));
+    ok(`${host} redirect_uri → consent page`, r.status === 200);
+  }
 } finally {
   child.kill();
 }

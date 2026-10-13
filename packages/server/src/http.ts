@@ -12,7 +12,7 @@ export interface HttpOptions {
   host?: string;
   /** required bearer token of the owner; also a password of the OAuth consent page */
   token: string;
-  /** extra hosts allowed as OAuth redirect targets (claude.ai is allowed by default) */
+  /** extra hosts allowed as OAuth redirect targets, added to the defaults (claude.ai, claude.com, chatgpt.com, localhost) */
   allowedRedirectHosts?: string[];
   /**
    * Pin the protocol era instead of detecting it per request:

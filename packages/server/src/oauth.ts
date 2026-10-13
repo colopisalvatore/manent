@@ -17,7 +17,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
  */
 
 const CODE_TTL_MS = 5 * 60_000;
-const DEFAULT_ALLOWED_REDIRECT_HOSTS = ["claude.ai", "claude.com", "localhost", "127.0.0.1"];
+const DEFAULT_ALLOWED_REDIRECT_HOSTS = ["claude.ai", "claude.com", "chatgpt.com", "localhost", "127.0.0.1"];
 export const OWNER_SUBJECT = "owner";
 
 interface PendingCode {
@@ -159,7 +159,7 @@ export async function handleOAuth(
   opts: OAuthOptions,
 ): Promise<boolean> {
   const origin = externalOrigin(req);
-  const allowedHosts = opts.allowedRedirectHosts ?? DEFAULT_ALLOWED_REDIRECT_HOSTS;
+  const allowedHosts = [...DEFAULT_ALLOWED_REDIRECT_HOSTS, ...(opts.allowedRedirectHosts ?? [])];
   const resolveSubject = opts.resolveSubject ?? ((t: string) => (constantTimeEqual(t, opts.masterToken) ? OWNER_SUBJECT : undefined));
 
   // Resource metadata may be probed at a path-suffixed URL too.

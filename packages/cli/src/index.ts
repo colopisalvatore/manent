@@ -102,6 +102,10 @@ program
   .option("--host <host>", "bind address for --http", "127.0.0.1")
   .option("--token <token>", "bearer token for --http (or env MANENT_HTTP_TOKEN)")
   .option(
+    "--allow-redirect-host <hosts>",
+    "extra hosts allowed as OAuth redirect targets, comma-separated — claude.ai, claude.com, chatgpt.com and localhost already are (or env MANENT_ALLOWED_REDIRECT_HOSTS)",
+  )
+  .option(
     "--era <era>",
     "protocol era for --http: auto | legacy (handshake revisions) | modern (2026-07-28)",
     "auto",
@@ -128,6 +132,7 @@ program
         http?: string;
         host: string;
         token?: string;
+        allowRedirectHost?: string;
         era: string;
         retriever: string;
         model?: string;
@@ -187,6 +192,10 @@ program
         port: Number(opts.http),
         host: opts.host,
         token,
+        allowedRedirectHosts: (opts.allowRedirectHost ?? process.env.MANENT_ALLOWED_REDIRECT_HOSTS)
+          ?.split(",")
+          .map((h) => h.trim())
+          .filter(Boolean),
         era: opts.era as "auto" | "legacy" | "modern",
         retriever,
         model: opts.model,
