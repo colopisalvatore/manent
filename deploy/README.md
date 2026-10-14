@@ -57,7 +57,12 @@ systemctl enable --now manent-brain
 `agents.json` maps a name to `{token, read, write}`: the audience labels that identity may see, and
 the one directory it may write into. An unattended agent whose client cannot answer the
 confirmation form (every write comes back `Write not confirmed (decline)`) takes `"confirm": false`
-next to its `write` dir. Generate one token per agent (`openssl rand -hex 32`), never
+next to its `write` dir. The owner has no such switch: a client that advertises elicitation but
+never shows the form — the claude.ai chat answers it with `cancel` by itself, so every write comes
+back `Write not confirmed (cancel)` and a "yes" typed in the chat never reaches the server — can
+only write through a server started with `--no-confirm`. That is a choice for the operator: it
+removes the form for every caller, while the injection and personal-data gates, the audit line and
+an agent's quarantine still stand. Generate one token per agent (`openssl rand -hex 32`), never
 share one between two, and expect the server to refuse to start rather than guess — a short token,
 a misspelt label or a duplicate is fatal at startup, because the alternative is an agent quietly
 seeing more or less than intended.

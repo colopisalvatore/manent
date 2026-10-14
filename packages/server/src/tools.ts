@@ -647,7 +647,15 @@ async function runWrite(ctx: BrainContext, args: Record<string, unknown>, call?:
       };
     }
     if (answer.action !== "accept" || answer.content?.confirm !== true) {
-      return { ...text(`Write not confirmed (${answer.action ?? "no answer"}): nothing was written.`), audit: { declined: true } };
+      // `cancel` is the form closed without an answer — and some clients (the
+      // claude.ai chat, headless agents) send it themselves, never showing the
+      // form. Say so: the model relays this sentence to a person who did not
+      // see a question and cannot tell a refusal from a missing window.
+      const hint =
+        answer.action === "cancel"
+          ? " The confirmation form was closed without an answer: if this client cannot show it, a confirmation in the chat does not reach the server — the operator can start it with --no-confirm."
+          : "";
+      return { ...text(`Write not confirmed (${answer.action ?? "no answer"}): nothing was written.${hint}`), audit: { declined: true } };
     }
   }
 
