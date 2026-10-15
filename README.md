@@ -179,7 +179,11 @@ otherwise. When they are on:
    capability but has nobody to answer — an unattended agent runtime — is declined on every write;
    give that agent `"confirm": false` in the agents file and the server stops asking it: its note
    still lands in quarantine, private, and `manent promote` stays the person's approval. The owner
-   is always asked.
+   is always asked. A client that advertises the capability but closes the form itself with
+   `cancel` (the claude.ai chat does) is asked in the conversation instead: the answer to the
+   `cancel` hands the proposal back to the model with a confirmation code bound to that exact note,
+   and only a retry carrying the code — after the person said yes in the chat — writes. `decline`
+   stays final.
 
 ### Every write is a commit: `--git`
 

@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { z, type ZodRawShape } from "zod";
 import {
@@ -91,6 +91,9 @@ function noteFollowed(ctx: BrainContext, name: string): void {
     }
   }
 }
+
+const CONFIRMATION_DOC =
+  "only after a previous call answered with a confirmation code and the person said yes in the chat to the proposal it showed: that code. Never otherwise.";
 
 export const BRAIN_TOOLS: BrainTool[] = [
   {
@@ -329,6 +332,7 @@ export const BRAIN_TOOLS: BrainTool[] = [
         dir: { type: "string", description: "vault-relative folder, e.g. 'memory' or 'projects/aios' (owner only; agents write where they were granted)" },
         mode: { type: "string", enum: ["create", "overwrite"], description: "default 'create'" },
         audience: { type: "array", items: { type: "string" }, description: "who may read it (owner only); default private" },
+        confirmation: { type: "string", description: CONFIRMATION_DOC },
       },
       required: ["name", "description", "type", "body"],
       additionalProperties: false,
@@ -341,6 +345,7 @@ export const BRAIN_TOOLS: BrainTool[] = [
       dir: z.string().optional().describe("vault-relative folder, e.g. 'memory' (owner only)"),
       mode: z.enum(["create", "overwrite"]).optional().describe("default 'create'"),
       audience: z.array(z.string()).optional().describe("who may read it (owner only); default private"),
+      confirmation: z.string().optional().describe(CONFIRMATION_DOC),
     },
     run: (args, ctx, call) => runWrite(ctx, { ...args, mode: args.mode ?? "create" }, call),
   },
@@ -355,6 +360,7 @@ export const BRAIN_TOOLS: BrainTool[] = [
         name: { type: "string", description: "canonical slug of the existing note" },
         body: { type: "string", description: "markdown to append" },
         dir: { type: "string", description: "vault-relative folder the note lives in (owner only)" },
+        confirmation: { type: "string", description: CONFIRMATION_DOC },
       },
       required: ["name", "body"],
       additionalProperties: false,
@@ -363,6 +369,7 @@ export const BRAIN_TOOLS: BrainTool[] = [
       name: z.string().describe("canonical slug of the existing note"),
       body: z.string().describe("markdown to append"),
       dir: z.string().optional().describe("vault-relative folder the note lives in (owner only)"),
+      confirmation: z.string().optional().describe(CONFIRMATION_DOC),
     },
     run: (args, ctx, call) => runWrite(ctx, { ...args, mode: "append" }, call),
   },
@@ -547,6 +554,21 @@ const CONFIRM_KEY = "confirm-write";
 const fingerprint = (o: unknown) => createHash("sha256").update(JSON.stringify(o)).digest("base64url").slice(0, 32);
 
 /**
+ * The code that carries a confirmation given in the chat. Keyed with a secret
+ * of this process, so only this server can have issued it, and bound to the
+ * proposal's fingerprint, so it confirms that exact note and nothing else. A
+ * restart forgets the key; the next call simply asks again.
+ */
+const CONFIRMATION_KEY = randomBytes(32);
+const confirmationCode = (state: string) => createHmac("sha256", CONFIRMATION_KEY).update(state).digest("base64url").slice(0, 16);
+function codeMatches(given: unknown, state: string): boolean {
+  if (typeof given !== "string") return false;
+  const want = Buffer.from(confirmationCode(state));
+  const got = Buffer.from(given.trim());
+  return got.length === want.length && timingSafeEqual(got, want);
+}
+
+/**
  * Shared body of the write tools: the gate, the identity rules, the approval,
  * the write, the re-index.
  *
@@ -614,12 +636,19 @@ async function runWrite(ctx: BrainContext, args: Record<string, unknown>, call?:
   // `manent promote` makes it anything more.
   const elicitation = ctx.confirmWrites ? call?.clientCapabilities?.elicitation : undefined;
   const asked = !(id.confirm === false && !id.owner);
+  let confirmedIn: "form" | "chat" | undefined;
   if (asked && elicitation && typeof elicitation === "object") {
     const state = fingerprint({ name, dir, mode, type, description, body, agent: id.name });
     const answer = call?.inputResponses?.[CONFIRM_KEY];
-    if (!answer || call?.requestState !== state) {
-      const where = dir ? `${dir}/${name}.md` : `${name}.md`;
-      const preview = body.length > 400 ? `${body.slice(0, 400)}…` : body;
+    const where = dir ? `${dir}/${name}.md` : `${name}.md`;
+    const preview = body.length > 400 ? `${body.slice(0, 400)}…` : body;
+    const proposal =
+      `${id.name} wants to ${mode} the note ${where}${type ? ` (${type})` : ""}${stamp.status ? " — it will land in quarantine, private, until you promote it" : ""}.\n\n` +
+      `${description ?? ""}\n\n${preview}`;
+    if (codeMatches(args.confirmation, state)) {
+      // The person said yes in the chat to the proposal this code was issued for.
+      confirmedIn = "chat";
+    } else if (!answer || call?.requestState !== state) {
       return {
         content: [{ type: "text", text: `Waiting for the person to confirm the ${mode} of ${where}.` }],
         inputRequired: {
@@ -628,9 +657,7 @@ async function runWrite(ctx: BrainContext, args: Record<string, unknown>, call?:
               method: "elicitation/create",
               params: {
                 mode: "form",
-                message:
-                  `${id.name} wants to ${mode} the note ${where}${type ? ` (${type})` : ""}${stamp.status ? " — it will land in quarantine, private, until you promote it" : ""}.\n\n` +
-                  `${description ?? ""}\n\n${preview}`,
+                message: proposal,
                 requestedSchema: {
                   type: "object",
                   properties: {
@@ -645,17 +672,27 @@ async function runWrite(ctx: BrainContext, args: Record<string, unknown>, call?:
         },
         audit: { pending: "confirmation" },
       };
-    }
-    if (answer.action !== "accept" || answer.content?.confirm !== true) {
-      // `cancel` is the form closed without an answer — and some clients (the
-      // claude.ai chat, headless agents) send it themselves, never showing the
-      // form. Say so: the model relays this sentence to a person who did not
-      // see a question and cannot tell a refusal from a missing window.
-      const hint =
-        answer.action === "cancel"
-          ? " The confirmation form was closed without an answer: if this client cannot show it, a confirmation in the chat does not reach the server — the operator can start it with --no-confirm."
-          : "";
-      return { ...text(`Write not confirmed (${answer.action ?? "no answer"}): nothing was written.${hint}`), audit: { declined: true } };
+    } else if (answer.action === "cancel") {
+      // The form was closed without an answer. Some clients — the claude.ai
+      // chat among them — advertise elicitation and then send `cancel`
+      // themselves, never showing it, so a "yes" typed in the chat would never
+      // reach this server. Ask in the conversation instead: the proposal goes
+      // back to the model with a code that confirms exactly it. `decline`
+      // stays final; only a form nobody answered falls back here.
+      const tool = mode === "append" ? "brain_append" : "brain_write";
+      return {
+        ...text(
+          `Nothing was written yet: the confirmation form was closed without an answer, so the person has not seen it. ` +
+            `Ask them in the chat now: show them the proposal below and wait for an explicit yes. ` +
+            `Only if they say yes, call ${tool} again with exactly the same arguments plus confirmation: "${confirmationCode(state)}". ` +
+            `If they say no, or do not answer, do not call it.\n\nProposal: ${proposal}`,
+        ),
+        audit: { pending: "chat-confirmation" },
+      };
+    } else if (answer.action !== "accept" || answer.content?.confirm !== true) {
+      return { ...text(`Write not confirmed (${answer.action ?? "no answer"}): nothing was written.`), audit: { declined: true } };
+    } else {
+      confirmedIn = "form";
     }
   }
 
@@ -689,7 +726,7 @@ async function runWrite(ctx: BrainContext, args: Record<string, unknown>, call?:
         ...(stamp.status ? { status: stamp.status } : {}),
         ...(git ? { git } : {}),
       }),
-      audit: { relPath: res.relPath, created: res.created, ...(git ? { git } : {}) },
+      audit: { relPath: res.relPath, created: res.created, ...(confirmedIn ? { confirmedIn } : {}), ...(git ? { git } : {}) },
     };
   } catch (err) {
     if (err instanceof WriteRefused) return refuse(err.message);

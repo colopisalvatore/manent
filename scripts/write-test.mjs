@@ -117,10 +117,33 @@ const declined = await findTool("brain_write").run(proposal, rw, {
   requestState: asked.inputRequired.requestState,
   inputResponses: { "confirm-write": { action: "cancel" } },
 });
-ok("cancel writes nothing", declined.audit?.declined === true);
-const accepted = await findTool("brain_write").run(proposal, rw, {
+ok("cancel writes nothing", (await call(rw, "brain_read", { name: "nota-confermata" })).isError === true);
+
+// A client that closes the form by itself (the claude.ai chat) gets the
+// question handed back for the chat, with a code bound to this proposal.
+const code = declined.content[0].text.match(/confirmation: "([^"]+)"/)?.[1];
+ok("cancel hands the question to the chat, with a code", declined.audit?.pending === "chat-confirmation" && !!code);
+const forged = await findTool("brain_write").run({ ...proposal, confirmation: "AAAAAAAAAAAAAAAA" }, rw, elicits);
+ok("a made-up code is asked again", !!forged.inputRequired);
+const swapped = await findTool("brain_write").run({ ...proposal, body: "altro", confirmation: code }, rw, elicits);
+ok("the code does not confirm a different note", !!swapped.inputRequired);
+const refused = await findTool("brain_write").run(proposal, rw, {
   ...elicits,
   requestState: asked.inputRequired.requestState,
+  inputResponses: { "confirm-write": { action: "decline" } },
+});
+ok("decline stays final, no code", refused.audit?.declined === true && !/confirmation: "/.test(refused.content[0].text));
+const viaChat = await findTool("brain_write").run({ ...proposal, name: "nota-chat", confirmation: code }, rw, elicits);
+ok("the code does not confirm another name", !!viaChat.inputRequired);
+const chatYes = await findTool("brain_write").run({ ...proposal, confirmation: code }, rw, elicits);
+ok("the yes said in the chat writes", !chatYes.isError && !chatYes.inputRequired && chatYes.audit?.confirmedIn === "chat");
+ok("the note is on disk", !(await call(rw, "brain_read", { name: "nota-confermata" })).isError);
+
+const proposal2 = { ...proposal, name: "nota-confermata-form" };
+const asked2 = await findTool("brain_write").run(proposal2, rw, elicits);
+const accepted = await findTool("brain_write").run(proposal2, rw, {
+  ...elicits,
+  requestState: asked2.inputRequired.requestState,
   inputResponses: { "confirm-write": { action: "accept", content: { confirm: true } } },
 });
 ok("accept writes", !accepted.isError && !accepted.inputRequired);
