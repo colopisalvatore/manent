@@ -122,7 +122,9 @@ export async function handleModernRequest(
           },
           instructions:
             "File-first memory vault. Search with brain_search, open a note with brain_read, walk its links with brain_neighbors. " +
-            "Writes, where allowed, ask the person to confirm and land in quarantine for agents. " +
+            (ctx.confirmWrites
+              ? "Writes, where allowed, ask the person to confirm (a form, or in the chat when the client cannot show one) and land in quarantine for agents. "
+              : "Writes, where allowed, land without a confirmation form — in quarantine for agents. ") +
             "brain_curate reads the whole vault at once: declare the tasks extension and it comes back as a task to poll.",
           ttlMs: LIST_TTL_MS,
           cacheScope: "private",

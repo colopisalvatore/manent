@@ -57,7 +57,11 @@ systemctl enable --now manent-brain
 `agents.json` maps a name to `{token, read, write}`: the audience labels that identity may see, and
 the one directory it may write into. An unattended agent whose client cannot answer the
 confirmation form (every write comes back `Write not confirmed (decline)`) takes `"confirm": false`
-next to its `write` dir. Generate one token per agent (`openssl rand -hex 32`), never
+next to its `write` dir. A client that advertises elicitation but never shows the form — the
+claude.ai chat closes it with `cancel` by itself — needs nothing: on `cancel` the server hands the
+proposal back to the model with a confirmation code bound to that exact note, the model asks the
+person in the chat, and only the retry carrying the code writes (`confirmedIn: "chat"` in the
+audit). `decline` stays final. Generate one token per agent (`openssl rand -hex 32`), never
 share one between two, and expect the server to refuse to start rather than guess — a short token,
 a misspelt label or a duplicate is fatal at startup, because the alternative is an agent quietly
 seeing more or less than intended.
