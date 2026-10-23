@@ -142,10 +142,14 @@ export async function writeNote(root: string, input: WriteNoteInput): Promise<Wr
 
   const kept = datesAsStrings((previous?.frontmatter ?? {}) as Record<string, unknown>);
   const today = new Date().toISOString().slice(0, 10);
+  // Root-level entry points (MEMORY.md, HOME.md) keep an uppercase filename by
+  // convention, but `name` is still a lowercase slug (SPEC §3): writing the
+  // filename verbatim would leave the note failing the schema.
+  const isRootFile = !relPath.includes("/");
   const frontmatter: Record<string, unknown> = {
     ...kept,
     ...(input.frontmatter ?? {}),
-    name,
+    name: isRootFile ? name.toLowerCase() : name,
     description: String(description).trim(),
     type,
     created: typeof kept.created === "string" ? kept.created : today,
