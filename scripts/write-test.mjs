@@ -97,6 +97,19 @@ ok(
   (await call(rw, "brain_append", { name: "does-not-exist", body: "b" })).isError === true,
 );
 
+// HOME.md / MEMORY.md keep their uppercase filename, but `name` is a slug: an
+// MCP overwrite once wrote `name: HOME` and the vault failed lint.
+console.log("\n── root entry points ──");
+await writeFile(
+  join(root, "HOME.md"),
+  ["---", "name: home", "description: hub", "type: moc", "---", "corpo", ""].join("\n"),
+  "utf8",
+);
+const home = await call(rw, "brain_write", { name: "HOME", body: "nuovo hub", mode: "overwrite" });
+const homeRaw = await readFile(join(root, "HOME.md"), "utf8");
+ok("overwrite of HOME.md succeeds", !home.isError);
+ok("HOME.md keeps a lowercase name", /^name: home$/m.test(homeRaw), homeRaw.split("\n")[1]);
+
 console.log("\n── the write is visible at once ──");
 ok("brain_read sees it", !(await call(rw, "brain_read", { name: "nota-test" })).isError);
 ok(
