@@ -3,3 +3,9 @@ dist/
 *.tsbuildinfo
 .smoke-vault/
 .manent/
+
+# PromptOps context snapshot
+.promptops/
+
+# PromptOps session assets
+.promptops-assets/
