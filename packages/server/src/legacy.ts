@@ -24,7 +24,11 @@ export function buildLegacyServer(ctx: BrainContext): McpServer {
         // No call context: this era cannot ask the person anything, so a
         // write goes straight through (owner) or to quarantine (agent).
         const out = await callTool(tool.name, args, ctx);
-        return { content: out.content, ...(out.isError ? { isError: true } : {}) };
+        return {
+          content: out.content,
+          ...(out.isError ? { isError: true } : {}),
+          ...(out.structuredContent ? { structuredContent: out.structuredContent } : {}),
+        };
       },
     );
   }

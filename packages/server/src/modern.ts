@@ -242,7 +242,11 @@ export async function handleModernRequest(
       return {
         jsonrpc: "2.0",
         id,
-        result: withMeta({ content: out.content, ...(out.isError ? { isError: true } : {}) }),
+        result: withMeta({
+          content: out.content,
+          ...(out.isError ? { isError: true } : {}),
+          ...(out.structuredContent ? { structuredContent: out.structuredContent } : {}),
+        }),
       };
     }
 

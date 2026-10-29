@@ -34,6 +34,14 @@ export interface ToolResult {
    * tool only asks when the call context says the client can answer.
    */
   inputRequired?: { inputRequests: Record<string, unknown>; requestState: string };
+  /**
+   * A machine-readable twin of `content` for a caller that does not want to
+   * pattern-match English prose to tell a write from a declined, cancelled
+   * or expired confirmation — all of which otherwise look alike (`isError`
+   * unset, `content` prose) to a caller that only checks the one flag.
+   * Currently only the write tools set it.
+   */
+  structuredContent?: Record<string, unknown>;
   /** what the audit line should carry beyond the tool name and arguments */
   audit?: Record<string, unknown>;
   /** the SDK's result type is open-ended; this keeps the shape assignable */
@@ -554,17 +562,56 @@ const CONFIRM_KEY = "confirm-write";
 const fingerprint = (o: unknown) => createHash("sha256").update(JSON.stringify(o)).digest("base64url").slice(0, 32);
 
 /**
- * The code that carries a confirmation given in the chat. Keyed with a secret
- * of this process, so only this server can have issued it, and bound to the
- * proposal's fingerprint, so it confirms that exact note and nothing else. A
- * restart forgets the key; the next call simply asks again.
+ * How long a pending confirmation stays answerable: long enough for a person
+ * to read a chat message and reply, short enough that a code or a request
+ * state that ends up logged somewhere does not stay good indefinitely. Both
+ * the form's `requestState` and the chat's `confirmation` code carry their
+ * own issue time so this holds without the server remembering anything
+ * between calls.
+ */
+const WRITE_CONFIRMATION_TTL_MS = 10 * 60 * 1000;
+
+/** `fp.ts36`: a content fingerprint and the time it was issued, both opaque to the caller. */
+const issueState = (proposal: unknown): string => `${fingerprint(proposal)}.${Date.now().toString(36)}`;
+function parseState(state: string): { fp: string; ts: number } | undefined {
+  const dot = state.indexOf(".");
+  if (dot < 0) return undefined;
+  const ts = Number.parseInt(state.slice(dot + 1), 36);
+  return Number.isFinite(ts) ? { fp: state.slice(0, dot), ts } : undefined;
+}
+/** Same proposal this was issued for, regardless of age. */
+function stateMatches(state: string, proposal: unknown): boolean {
+  return parseState(state)?.fp === fingerprint(proposal);
+}
+/** Issued within the TTL. A state with no parseable timestamp is never fresh. */
+function stateIsFresh(state: string): boolean {
+  const parsed = parseState(state);
+  return !!parsed && Date.now() - parsed.ts <= WRITE_CONFIRMATION_TTL_MS;
+}
+
+/**
+ * The code that carries a confirmation given in the chat: `ts36.hmac`, keyed
+ * with a secret of this process so only this server can have issued it, and
+ * bound to the proposal's fingerprint (recomputed from the retry's own
+ * arguments, never stored) so it confirms that exact note and nothing else.
+ * The timestamp travels inside the code itself — nothing to remember between
+ * calls — and a restart forgets the key, so the next call simply asks again.
  */
 const CONFIRMATION_KEY = randomBytes(32);
-const confirmationCode = (state: string) => createHmac("sha256", CONFIRMATION_KEY).update(state).digest("base64url").slice(0, 16);
-function codeMatches(given: unknown, state: string): boolean {
+function confirmationCode(fp: string): string {
+  const ts36 = Date.now().toString(36);
+  const mac = createHmac("sha256", CONFIRMATION_KEY).update(`${fp}.${ts36}`).digest("base64url").slice(0, 16);
+  return `${ts36}.${mac}`;
+}
+function codeMatches(given: unknown, fp: string): boolean {
   if (typeof given !== "string") return false;
-  const want = Buffer.from(confirmationCode(state));
-  const got = Buffer.from(given.trim());
+  const dot = given.indexOf(".");
+  if (dot < 0) return false;
+  const ts36 = given.slice(0, dot);
+  const ts = Number.parseInt(ts36, 36);
+  if (!Number.isFinite(ts) || Date.now() - ts > WRITE_CONFIRMATION_TTL_MS) return false;
+  const want = Buffer.from(createHmac("sha256", CONFIRMATION_KEY).update(`${fp}.${ts36}`).digest("base64url").slice(0, 16));
+  const got = Buffer.from(given.slice(dot + 1).trim());
   return got.length === want.length && timingSafeEqual(got, want);
 }
 
@@ -638,17 +685,55 @@ async function runWrite(ctx: BrainContext, args: Record<string, unknown>, call?:
   const asked = !(id.confirm === false && !id.owner);
   let confirmedIn: "form" | "chat" | undefined;
   if (asked && elicitation && typeof elicitation === "object") {
-    const state = fingerprint({ name, dir, mode, type, description, body, agent: id.name });
+    const proposalArgs = { name, dir, mode, type, description, body, agent: id.name };
+    const fp = fingerprint(proposalArgs);
     const answer = call?.inputResponses?.[CONFIRM_KEY];
     const where = dir ? `${dir}/${name}.md` : `${name}.md`;
     const preview = body.length > 400 ? `${body.slice(0, 400)}…` : body;
     const proposal =
       `${id.name} wants to ${mode} the note ${where}${type ? ` (${type})` : ""}${stamp.status ? " — it will land in quarantine, private, until you promote it" : ""}.\n\n` +
       `${description ?? ""}\n\n${preview}`;
-    if (codeMatches(args.confirmation, state)) {
+    const chatFallback = (): ToolResult => {
+      // The proposal goes back to the model with a code that confirms
+      // exactly it, bound to this fingerprint and good for WRITE_CONFIRMATION_TTL_MS.
+      const tool = mode === "append" ? "brain_append" : "brain_write";
+      return {
+        ...text(
+          `Nothing was written yet: the confirmation form was closed without an answer, so the person has not seen it. ` +
+            `Ask them in the chat now: show them the proposal below and wait for an explicit yes. ` +
+            `Only if they say yes, call ${tool} again with exactly the same arguments plus confirmation: "${confirmationCode(fp)}". ` +
+            `If they say no, or do not answer, do not call it.\n\nProposal: ${proposal}`,
+        ),
+        structuredContent: { outcome: "needs-chat-confirmation", written: false },
+        audit: { pending: "chat-confirmation" },
+      };
+    };
+
+    // A code past WRITE_CONFIRMATION_TTL_MS is reported as expired rather
+    // than silently falling through to "ask again" below — the timestamp is
+    // plaintext in the code, so this is checked before the HMAC. A code
+    // that is merely wrong (bad HMAC, or for a different proposal) is not
+    // specially handled: it is as if none was given, and whatever the
+    // elicitation round trip below says applies.
+    const codeDot = typeof args.confirmation === "string" ? args.confirmation.indexOf(".") : -1;
+    const codeTs = codeDot >= 0 ? Number.parseInt((args.confirmation as string).slice(0, codeDot), 36) : NaN;
+    const codeExpired = codeDot >= 0 && Number.isFinite(codeTs) && Date.now() - codeTs > WRITE_CONFIRMATION_TTL_MS;
+    if (typeof args.confirmation === "string" && !codeExpired && codeMatches(args.confirmation, fp)) {
       // The person said yes in the chat to the proposal this code was issued for.
       confirmedIn = "chat";
-    } else if (!answer || call?.requestState !== state) {
+    } else if (typeof args.confirmation === "string" && codeExpired) {
+      return {
+        ...text(
+          `This confirmation code has expired (older than ${Math.round(WRITE_CONFIRMATION_TTL_MS / 60000)} minutes): nothing was written. ` +
+            `Ask the person again and call ${mode === "append" ? "brain_append" : "brain_write"} once more with the same arguments — a fresh code if they say yes.`,
+        ),
+        structuredContent: { outcome: "expired", written: false },
+        audit: { pending: "confirmation-expired" },
+      };
+    } else if (!answer || !stateMatches(call?.requestState ?? "", proposalArgs)) {
+      // No answer yet, or one for a different proposal (the args changed
+      // since this state was issued) — (re)ask, with a freshly timestamped
+      // state. A prior answer for the old proposal is simply ignored.
       return {
         content: [{ type: "text", text: `Waiting for the person to confirm the ${mode} of ${where}.` }],
         inputRequired: {
@@ -668,31 +753,46 @@ async function runWrite(ctx: BrainContext, args: Record<string, unknown>, call?:
               },
             },
           },
-          requestState: state,
+          requestState: issueState(proposalArgs),
         },
         audit: { pending: "confirmation" },
       };
-    } else if (answer.action === "cancel") {
-      // The form was closed without an answer. Some clients — the claude.ai
-      // chat among them — advertise elicitation and then send `cancel`
-      // themselves, never showing it, so a "yes" typed in the chat would never
-      // reach this server. Ask in the conversation instead: the proposal goes
-      // back to the model with a code that confirms exactly it. `decline`
-      // stays final; only a form nobody answered falls back here.
-      const tool = mode === "append" ? "brain_append" : "brain_write";
+    } else if (!stateIsFresh(call?.requestState ?? "")) {
       return {
         ...text(
-          `Nothing was written yet: the confirmation form was closed without an answer, so the person has not seen it. ` +
-            `Ask them in the chat now: show them the proposal below and wait for an explicit yes. ` +
-            `Only if they say yes, call ${tool} again with exactly the same arguments plus confirmation: "${confirmationCode(state)}". ` +
-            `If they say no, or do not answer, do not call it.\n\nProposal: ${proposal}`,
+          `This confirmation has expired (older than ${Math.round(WRITE_CONFIRMATION_TTL_MS / 60000)} minutes): nothing was written. ` +
+            `Call ${mode === "append" ? "brain_append" : "brain_write"} again with the same arguments to ask once more.`,
         ),
-        audit: { pending: "chat-confirmation" },
+        structuredContent: { outcome: "expired", written: false },
+        audit: { pending: "confirmation-expired" },
       };
-    } else if (answer.action !== "accept" || answer.content?.confirm !== true) {
-      return { ...text(`Write not confirmed (${answer.action ?? "no answer"}): nothing was written.`), audit: { declined: true } };
     } else {
-      confirmedIn = "form";
+      // A matching, still-fresh state, with an answer. Interpret it:
+      const action = typeof answer.action === "string" ? answer.action : undefined;
+      const content = answer.content && typeof answer.content === "object" ? (answer.content as Record<string, unknown>) : undefined;
+      const confirmField = content?.confirm;
+      if (action === "accept" && confirmField === true) {
+        confirmedIn = "form";
+      } else if (action === "decline" || (action === "accept" && confirmField === false)) {
+        // An explicit no: the dialog's own decline, or the form's own
+        // checkbox submitted unticked. Final — asking again would not help.
+        return {
+          ...text(`Write not confirmed (${action}): nothing was written.`),
+          structuredContent: { outcome: "declined", written: false },
+          audit: { declined: true, answerAction: action },
+        };
+      } else {
+        // `cancel`, or `accept` without a usable `confirm` field: some
+        // clients that declare elicitation render a single required
+        // boolean as a plain confirm dialog and never echo requestedSchema
+        // fields back, so "accept" arrives with no way to tell what was
+        // actually chosen. Either way the person was not asked the real
+        // question through this channel — same remedy as `cancel`: hand
+        // the proposal to the model with a code only an explicit yes in
+        // the chat can redeem. `audit.confirmField` records what shape the
+        // field came in as (never its value) for diagnosing a client.
+        return { ...chatFallback(), audit: { pending: "chat-confirmation", answerAction: action ?? null, confirmField: confirmField === undefined ? "missing" : typeof confirmField } };
+      }
     }
   }
 
@@ -726,6 +826,7 @@ async function runWrite(ctx: BrainContext, args: Record<string, unknown>, call?:
         ...(stamp.status ? { status: stamp.status } : {}),
         ...(git ? { git } : {}),
       }),
+      structuredContent: { outcome: "written", written: true, relPath: res.relPath, created: res.created, ...(stamp.status ? { status: stamp.status } : {}) },
       audit: { relPath: res.relPath, created: res.created, ...(confirmedIn ? { confirmedIn } : {}), ...(git ? { git } : {}) },
     };
   } catch (err) {

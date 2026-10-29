@@ -146,6 +146,11 @@ const refused = await findTool("brain_write").run(proposal, rw, {
   inputResponses: { "confirm-write": { action: "decline" } },
 });
 ok("decline stays final, no code", refused.audit?.declined === true && !/confirmation: "/.test(refused.content[0].text));
+ok(
+  "decline's structured outcome says declined, not written",
+  refused.structuredContent?.outcome === "declined" && refused.structuredContent?.written === false,
+  JSON.stringify(refused.structuredContent),
+);
 const viaChat = await findTool("brain_write").run({ ...proposal, name: "nota-chat", confirmation: code }, rw, elicits);
 ok("the code does not confirm another name", !!viaChat.inputRequired);
 const chatYes = await findTool("brain_write").run({ ...proposal, confirmation: code }, rw, elicits);
@@ -160,6 +165,96 @@ const accepted = await findTool("brain_write").run(proposal2, rw, {
   inputResponses: { "confirm-write": { action: "accept", content: { confirm: true } } },
 });
 ok("accept writes", !accepted.isError && !accepted.inputRequired);
+ok(
+  "accept's structured outcome says written",
+  accepted.structuredContent?.outcome === "written" && accepted.structuredContent?.written === true,
+  JSON.stringify(accepted.structuredContent),
+);
+
+// The reported bug: a client that advertises elicitation, shows a plain
+// confirm dialog for the schema's one boolean field, and answers `accept`
+// without ever carrying `content.confirm` back. That must not be read as
+// a decline — it is the same "the person was not actually asked through
+// this channel" situation as `cancel`, so it gets the same chat fallback.
+console.log("\n── accept without a usable confirm field (the ChatGPT case) ──");
+const proposal3 = { ...proposal, name: "nota-accept-sin-campo" };
+const asked3 = await findTool("brain_write").run(proposal3, rw, elicits);
+const acceptNoField = await findTool("brain_write").run(proposal3, rw, {
+  ...elicits,
+  requestState: asked3.inputRequired.requestState,
+  inputResponses: { "confirm-write": { action: "accept" } }, // no content at all
+});
+ok(
+  "accept with no confirm field falls back to the chat, not a silent decline",
+  !acceptNoField.isError && !acceptNoField.inputRequired && acceptNoField.structuredContent?.outcome === "needs-chat-confirmation",
+  JSON.stringify(acceptNoField.structuredContent),
+);
+ok("nothing written while it falls back", (await call(rw, "brain_read", { name: "nota-accept-sin-campo" })).isError === true);
+ok("diagnostics note the answer shape, not its value", acceptNoField.audit?.answerAction === "accept" && acceptNoField.audit?.confirmField === "missing");
+const code3 = acceptNoField.content[0].text.match(/confirmation: "([^"]+)"/)?.[1];
+ok("a code was still issued for the chat", !!code3);
+const yes3 = await findTool("brain_write").run({ ...proposal3, confirmation: code3 }, rw, elicits);
+ok(
+  "an explicit yes in the chat then writes",
+  !yes3.isError && !yes3.inputRequired && yes3.structuredContent?.outcome === "written",
+  JSON.stringify(yes3.structuredContent),
+);
+ok("the note is on disk", !(await call(rw, "brain_read", { name: "nota-accept-sin-campo" })).isError);
+
+// `content.confirm: false` under `accept` is the person explicitly saying no
+// inside the form itself — a real decline, not a dropped field, so it must
+// NOT get the chat fallback (asking again would just repeat their no).
+const proposal3b = { ...proposal, name: "nota-checkbox-no" };
+const asked3b = await findTool("brain_write").run(proposal3b, rw, elicits);
+const explicitNo = await findTool("brain_write").run(proposal3b, rw, {
+  ...elicits,
+  requestState: asked3b.inputRequired.requestState,
+  inputResponses: { "confirm-write": { action: "accept", content: { confirm: false } } },
+});
+ok(
+  "accept + confirm:false is a final decline, not a chat fallback",
+  !explicitNo.isError && explicitNo.structuredContent?.outcome === "declined" && explicitNo.audit?.declined === true,
+  JSON.stringify(explicitNo.structuredContent),
+);
+ok("nothing written", (await call(rw, "brain_read", { name: "nota-checkbox-no" })).isError === true);
+
+// Expiry: a request state or a confirmation code older than the TTL is
+// reported as expired, specifically, rather than silently written or
+// silently re-asked forever.
+console.log("\n── expiry ──");
+const TEN_MIN = 10 * 60 * 1000;
+const proposal4 = { ...proposal, name: "nota-form-scaduta" };
+const asked4 = await findTool("brain_write").run(proposal4, rw, elicits);
+const fp4 = asked4.inputRequired.requestState.split(".")[0];
+const staleState = `${fp4}.${(Date.now() - TEN_MIN - 60_000).toString(36)}`;
+const expiredForm = await findTool("brain_write").run(proposal4, rw, {
+  ...elicits,
+  requestState: staleState,
+  inputResponses: { "confirm-write": { action: "accept", content: { confirm: true } } },
+});
+ok(
+  "an expired form confirmation writes nothing, outcome is specific",
+  !expiredForm.isError && !expiredForm.inputRequired && expiredForm.structuredContent?.outcome === "expired",
+  JSON.stringify(expiredForm.structuredContent),
+);
+ok("nothing written for the expired form state", (await call(rw, "brain_read", { name: "nota-form-scaduta" })).isError === true);
+const asked4b = await findTool("brain_write").run(proposal4, rw, elicits);
+const retried4 = await findTool("brain_write").run(proposal4, rw, {
+  ...elicits,
+  requestState: asked4b.inputRequired.requestState,
+  inputResponses: { "confirm-write": { action: "accept", content: { confirm: true } } },
+});
+ok("a fresh ask after expiry is a new, independent request that succeeds", !retried4.isError && retried4.structuredContent?.outcome === "written");
+
+const proposal5 = { ...proposal, name: "nota-codice-scaduto" };
+const staleCode = `${(Date.now() - TEN_MIN - 60_000).toString(36)}.0000000000000000`;
+const expiredCode = await findTool("brain_write").run({ ...proposal5, confirmation: staleCode }, rw, elicits);
+ok(
+  "an expired confirmation code writes nothing, outcome is specific",
+  !expiredCode.isError && !expiredCode.inputRequired && expiredCode.structuredContent?.outcome === "expired",
+  JSON.stringify(expiredCode.structuredContent),
+);
+ok("nothing written for the expired code", (await call(rw, "brain_read", { name: "nota-codice-scaduto" })).isError === true);
 
 const unattended = await loadBrainContext(root, { writable: true, confirmWrites: false });
 const straight = await findTool("brain_write").run(

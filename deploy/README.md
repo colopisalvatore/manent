@@ -61,7 +61,15 @@ next to its `write` dir. A client that advertises elicitation but never shows th
 claude.ai chat closes it with `cancel` by itself — needs nothing: on `cancel` the server hands the
 proposal back to the model with a confirmation code bound to that exact note, the model asks the
 person in the chat, and only the retry carrying the code writes (`confirmedIn: "chat"` in the
-audit). `decline` stays final. Generate one token per agent (`openssl rand -hex 32`), never
+audit). The same fallback — not a decline — covers `accept` answered with no usable `content.confirm`
+field: a client that collapses a single required boolean into a plain confirm dialog without echoing
+`requestedSchema` back looks identical on the wire, and ChatGPT's connector did exactly this.
+`audit.answerAction` and `audit.confirmField` (never the note's content) record what shape a given
+client's answer actually took, for diagnosing one without reading the vault. `decline` — the action
+itself, or `content.confirm: false` inside `accept` — stays final, and nothing in this paragraph
+changes that. Both the form's `requestState` and the chat's code expire after ten minutes
+(`outcome: "expired"` in `structuredContent`, distinct from a decline); a client or chat that took
+longer just calls the write tool again. Generate one token per agent (`openssl rand -hex 32`), never
 share one between two, and expect the server to refuse to start rather than guess — a short token,
 a misspelt label or a duplicate is fatal at startup, because the alternative is an agent quietly
 seeing more or less than intended.

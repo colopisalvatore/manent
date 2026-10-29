@@ -182,8 +182,20 @@ otherwise. When they are on:
    is always asked. A client that advertises the capability but closes the form itself with
    `cancel` (the claude.ai chat does) is asked in the conversation instead: the answer to the
    `cancel` hands the proposal back to the model with a confirmation code bound to that exact note,
-   and only a retry carrying the code — after the person said yes in the chat — writes. `decline`
-   stays final.
+   and only a retry carrying the code — after the person said yes in the chat — writes. The same
+   fallback covers a client that answers `accept` without the form's own `confirm` field at all:
+   some elicitation UIs render a single required boolean as a plain confirm dialog and never echo
+   `requestedSchema` fields back, so "accept" arrives with nothing to tell what was actually
+   chosen — read as a decline, that would silently fail every write from such a client, as
+   ChatGPT's connector did. It is not read as a decline: `content.confirm` has to be the literal
+   boolean `false` (the form's own checkbox, submitted unticked) for that, and only then does
+   `decline` stay final. Every outcome of a write call — written, declined, waiting on the chat,
+   or expired — also comes back as `structuredContent: {outcome, written}`, so a caller does not
+   have to pattern-match the English sentence in `content` to tell them apart. Both the form's
+   `requestState` and the chat's confirmation code carry their own issue time and expire after ten
+   minutes; an expired one is reported as `outcome: "expired"`, specifically, rather than written,
+   silently re-asked, or confused with a decline — calling the write tool again starts a new,
+   independent request.
 
 ### Every write is a commit: `--git`
 
