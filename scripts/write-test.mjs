@@ -124,6 +124,10 @@ const elicits = { clientCapabilities: { elicitation: {} } };
 const proposal = { name: "nota-confermata", description: "d", type: "reference", body: "b" };
 const asked = await findTool("brain_write").run(proposal, rw, elicits);
 ok("a client that can ask gets the form", !!asked.inputRequired);
+// A stated default would let a client that cannot render the control echo
+// `confirm:false` back, indistinguishable from a deliberate decline.
+const confirmField = asked.inputRequired.inputRequests["confirm-write"].params.requestedSchema.properties.confirm;
+ok("the confirm field states no default", confirmField && !("default" in confirmField), JSON.stringify(confirmField));
 ok("nothing is written while it waits", (await call(rw, "brain_read", { name: "nota-confermata" })).isError === true);
 const declined = await findTool("brain_write").run(proposal, rw, {
   ...elicits,

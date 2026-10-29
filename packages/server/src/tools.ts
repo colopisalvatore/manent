@@ -746,7 +746,14 @@ async function runWrite(ctx: BrainContext, args: Record<string, unknown>, call?:
                 requestedSchema: {
                   type: "object",
                   properties: {
-                    confirm: { type: "boolean", title: "Write this note?", description: "Nothing is written unless you confirm.", default: false },
+                    // No `default`: a client that cannot render this control and
+                    // falls back to echoing the schema's stated default would
+                    // produce a `confirm:false` indistinguishable from a real,
+                    // deliberate decline. Leaving it undeclared gives such a
+                    // client nothing to copy — it is more likely to omit the
+                    // field, which the branch below already routes to the chat
+                    // fallback instead of a final decline.
+                    confirm: { type: "boolean", title: "Write this note?", description: "Nothing is written unless you confirm." },
                   },
                   required: ["confirm"],
                 },
