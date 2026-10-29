@@ -73,7 +73,8 @@ try {
   const reloads = (stderr.match(/\[manent\] reloaded/g) ?? []).length;
   ok("reloads are coalesced, not one per file", reloads >= 3 && reloads <= 5, `${reloads} reloads for 6 file events`);
 } finally {
-  child.kill();
+  // SIGKILL for fast, unconditional teardown — see acl-test.mjs's comment.
+  child.kill("SIGKILL");
 }
 
 await rm(root, { recursive: true, force: true });

@@ -183,7 +183,8 @@ try {
   const update = await post(MASTER, { jsonrpc: "2.0", id: 10, method: "tasks/update", params: { _meta: plain, taskId, inputResponses: {} } });
   ok("tasks/update says why it cannot apply here", !!update.error && update.error.message.includes("not waiting for input"), JSON.stringify(update.error).slice(0, 160));
 } finally {
-  child.kill();
+  // SIGKILL for fast, unconditional teardown — see acl-test.mjs's comment.
+  child.kill("SIGKILL");
 }
 
 await rm(root, { recursive: true, force: true });

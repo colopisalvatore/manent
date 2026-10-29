@@ -259,7 +259,10 @@ try {
   const legacyWrite = await (await post(agents.tech.token, { jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "brain_write", arguments: { ...wargs, name: "wire-legacy" } } })).json();
   ok("legacy era: an agent write lands in quarantine without asking", !!legacyWrite.result?.content?.[0]?.text?.includes("quarantine/tech/wire-legacy.md"), JSON.stringify(legacyWrite).slice(0, 200));
 } finally {
-  child.kill();
+  // SIGKILL: the graceful SIGTERM path now drains in-flight requests before
+  // exiting, which would make teardown wait on this suite's own lingering
+  // keep-alive connections. shutdown-test.mjs is where that path is tested.
+  child.kill("SIGKILL");
 }
 
 await rm(root, { recursive: true, force: true });

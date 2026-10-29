@@ -36,7 +36,8 @@
     "test:tasks": "node scripts/tasks-test.mjs",
     "test:apps": "node scripts/apps-test.mjs",
     "test:git": "node scripts/git-test.mjs",
-    "test:reindex": "node scripts/reindex-test.mjs"
+    "test:reindex": "node scripts/reindex-test.mjs",
+    "test:shutdown": "node scripts/shutdown-test.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",

@@ -74,5 +74,6 @@ if (stderr.includes("ranker unavailable")) {
   ok("upgrades to the fused ranker once warm", hits[0]?.via?.includes("dense"), `via=${hits[0]?.via}`);
 }
 
-child.kill();
+// SIGKILL for fast, unconditional teardown — see acl-test.mjs's comment.
+child.kill("SIGKILL");
 if (failures > 0) process.exitCode = 1;

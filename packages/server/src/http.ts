@@ -223,6 +223,42 @@ export async function serveHttp(root: string, opts: HttpOptions): Promise<Server
     `manent MCP endpoint on http://${host}:${opts.port}/mcp — era=${pinned} (legacy ${LEGACY_VERSIONS.join(", ")} | modern ${MODERN_VERSIONS.join(", ")}), auth required` +
       (agents.size > 0 ? `, ${agents.size} agent identit${agents.size === 1 ? "y" : "ies"}` : ""),
   );
-  httpServer.on("close", () => void ctx.close());
+  // Graceful shutdown: `systemctl restart` (the brain-sync timer runs this
+  // after every change the vault's git remote picked up) sends SIGTERM.
+  // Node's default action for an unhandled SIGTERM is to exit at once,
+  // severing whatever request is in flight — exactly where a person's
+  // confirmation retry is likely to land, since it follows a propose/read/
+  // answer round trip a restart can straddle, and a client sees that as a
+  // dropped connection, however its own MCP library chooses to report one.
+  // `httpServer.close()` stops accepting new connections but lets requests
+  // already in progress finish; only once that settles (or GRACE_MS runs
+  // out — an idle keep-alive connection `close()` would otherwise wait on
+  // forever) does the context close, flushing a queued commit or push,
+  // before the process exits. A second SIGTERM/SIGINT while this is already
+  // under way is a no-op: systemd's own TimeoutStopSec is the hard backstop.
+  const GRACE_MS = 8_000;
+  let shuttingDown = false;
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    void ctx
+      .close()
+      .catch((err) => console.error(`[manent] close on shutdown failed: ${err instanceof Error ? err.message : String(err)}`))
+      .finally(() => process.exit(0));
+  };
+  for (const sig of ["SIGINT", "SIGTERM"] as const) {
+    process.on(sig, () => {
+      if (shuttingDown) return;
+      shuttingDown = true;
+      console.error(`[manent] ${sig}: draining in-flight requests (up to ${GRACE_MS}ms), then exiting`);
+      const forceExit = setTimeout(finish, GRACE_MS);
+      forceExit.unref();
+      httpServer.close(() => {
+        clearTimeout(forceExit);
+        finish();
+      });
+    });
+  }
   return httpServer;
 }

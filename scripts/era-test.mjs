@@ -57,7 +57,8 @@ async function withServer(port, era, fn) {
       }),
     );
   } finally {
-    child.kill();
+    // SIGKILL for fast, unconditional teardown — see acl-test.mjs's comment.
+    child.kill("SIGKILL");
   }
 }
 

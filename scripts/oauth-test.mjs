@@ -134,7 +134,8 @@ try {
     ok(`${host} redirect_uri → consent page`, r.status === 200);
   }
 } finally {
-  child.kill();
+  // SIGKILL for fast, unconditional teardown — see acl-test.mjs's comment.
+  child.kill("SIGKILL");
 }
 
 // A logged FAIL has to fail the run: the whole point of the suite in CI.

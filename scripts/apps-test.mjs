@@ -181,7 +181,8 @@ try {
     ok("without a register the tool says how to get one", noRegister.result?.isError === true && noRegister.result.content[0].text.includes("--gaps"));
   }
 } finally {
-  child.kill();
+  // SIGKILL for fast, unconditional teardown — see acl-test.mjs's comment.
+  child.kill("SIGKILL");
   // Windows keeps the register file locked until the process is really gone.
   await new Promise((r) => (child.exitCode === null ? child.once("exit", r) : r()));
 }

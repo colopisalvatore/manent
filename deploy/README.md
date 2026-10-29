@@ -119,4 +119,10 @@ systemctl restart manent-brain
 
 That restart is the one that is fine: it costs a warmup, not data. Watch it come back with
 `journalctl -u manent-brain -f` — the port opens before the model is loaded, and answers lexically
-until it is warm.
+until it is warm. `systemctl restart`/`stop` sends SIGTERM, which the `--http` path now drains
+rather than dying on: it stops accepting new connections, lets whatever request is already in
+flight finish (up to 8s — an idle keep-alive connection would otherwise make `close()` wait
+forever), flushes a queued commit or push, and only then exits — well inside `TimeoutStopSec=30`.
+Before this, a request landing in the old instant restart (the brain-sync timer runs one on every
+change it pulls, several times a day on an active vault) read to the client as a dropped
+connection, however its own MCP library chose to report one.
