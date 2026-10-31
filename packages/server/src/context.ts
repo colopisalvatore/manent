@@ -14,6 +14,7 @@ import {
   type Retriever,
 } from "@manent/retrieval";
 import { AuditLog } from "./audit.js";
+import { FormTimeouts } from "./form-timeouts.js";
 import { FollowTracker, GapStore } from "./gaps.js";
 import { VaultGit, type GitOptions } from "./git.js";
 import { OWNER, scopeKey, type Identity } from "./identity.js";
@@ -68,6 +69,8 @@ export interface BrainContext {
   follow: FollowTracker;
   /** per-call audit, when the server was started with one */
   audit?: AuditLog;
+  /** clients that let the confirmation form time out unseen; rebuilt from the audit at boot */
+  formTimeouts: FormTimeouts;
   /** commits every write in the vault's repository, when the server was started with --git */
   git?: VaultGit;
   /** long-running tool calls, handed back as tasks on the modern path */
@@ -181,6 +184,8 @@ export async function loadBrainContext(
   // asked for them should learn now, not on the first call, if a path is unusable.
   const gaps = opts.gaps ? await GapStore.open({ path: opts.gaps.path, threshold: opts.gaps.threshold }) : undefined;
   const audit = opts.audit ? await AuditLog.open(opts.audit) : undefined;
+  const formTimeouts = new FormTimeouts();
+  if (opts.audit) await formTimeouts.seedFromAudit(opts.audit);
   const git = opts.git ? await VaultGit.open(root, opts.git) : undefined;
 
   /**
@@ -291,6 +296,7 @@ export async function loadBrainContext(
     gaps,
     follow: new FollowTracker(),
     audit,
+    formTimeouts,
     git,
     tasks: new TaskStore(),
     version: 1,
@@ -433,6 +439,7 @@ function buildView(root: BrainContext, identity: Identity, rank: (subset: Note[]
     gaps: root.gaps,
     follow: root.follow,
     audit: root.audit,
+    formTimeouts: root.formTimeouts,
     git: root.git,
     tasks: root.tasks,
     version: root.version,

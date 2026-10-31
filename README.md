@@ -192,7 +192,12 @@ otherwise. When they are on:
    `decline` stay final. A client that advertises the capability but never shows the form at all
    lets it time out unseen — a minute, on every attempt — before its `cancel` arrives; the model can
    skip that wait with `confirmIn: "chat"`, which returns the same code at once without a form and
-   writes nothing by itself (`requested: "chat"` in the audit). Every outcome of a write call — written, declined, waiting on the chat,
+   writes nothing by itself (`requested: "chat"` in the audit). The server does not wait for the
+   model to think of it: a `cancel` arriving 50s or more after the form was issued is that client's
+   own timeout, not a person, and the code sent back on it may never reach the model (claude.ai,
+   `User-Agent: Claude-User`, does exactly this). The server remembers the client — identity plus
+   User-Agent, for seven days, rebuilt from the audit's `formTimedOut` lines at every restart — and
+   its next writes skip the form and get the code at once (`skippedForm` in the audit). Every outcome of a write call — written, declined, waiting on the chat,
    or expired — also comes back as `structuredContent: {outcome, written}`, so a caller does not
    have to pattern-match the English sentence in `content` to tell them apart. Both the form's
    `requestState` and the chat's confirmation code carry their own issue time and expire after ten

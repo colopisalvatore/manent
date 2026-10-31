@@ -84,6 +84,7 @@ const withMeta = (result: Record<string, unknown>): Record<string, unknown> => (
 export async function handleModernRequest(
   body: unknown,
   ctx: BrainContext,
+  client?: string,
 ): Promise<JsonRpcResponse | undefined> {
   if (!body || typeof body !== "object") {
     return { jsonrpc: "2.0", id: null, error: { code: INVALID_PARAMS, message: "expected a JSON-RPC object" } };
@@ -208,6 +209,7 @@ export async function handleModernRequest(
         inputResponses: (params.inputResponses ?? undefined) as CallContext["inputResponses"],
         requestState: typeof params.requestState === "string" ? params.requestState : undefined,
         clientCapabilities: caps && typeof caps === "object" ? (caps as Record<string, unknown>) : undefined,
+        client,
       };
 
       // Work measured in the size of the vault, not of the query, goes back as

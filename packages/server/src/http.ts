@@ -185,7 +185,7 @@ export async function serveHttp(root: string, opts: HttpOptions): Promise<Server
       era = useModern ? "modern" : "legacy";
 
       if (useModern) {
-        const response = await handleModernRequest(body, view);
+        const response = await handleModernRequest(body, view, req.headers["user-agent"] || undefined);
         if (!response) {
           res.writeHead(202).end(); // notification: accepted, nothing to return
           return;

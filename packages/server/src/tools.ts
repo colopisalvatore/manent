@@ -14,6 +14,7 @@ import {
 import { AUDIENCE_PRIVATE, NOTE_TYPES, SLUG_RE } from "@manent/spec";
 import { communities, contradictions, duplicates } from "@manent/curate";
 import type { BrainContext } from "./context.js";
+import { FORM_TIMEOUT_MS, formTimeoutKey } from "./form-timeouts.js";
 import { scopeKey } from "./identity.js";
 
 /**
@@ -56,6 +57,8 @@ export interface CallContext {
   requestState?: string;
   /** `io.modelcontextprotocol/clientCapabilities` of the request */
   clientCapabilities?: Record<string, unknown>;
+  /** the caller's User-Agent, when the transport has one: tells clients apart for the form-timeout memory */
+  client?: string;
 }
 
 export interface BrainTool {
@@ -697,24 +700,29 @@ async function runWrite(ctx: BrainContext, args: Record<string, unknown>, call?:
     const proposalArgs = { name, dir, mode, type, description, body, agent: id.name };
     const fp = fingerprint(proposalArgs);
     const answer = call?.inputResponses?.[CONFIRM_KEY];
+    const timeoutKey = call?.client ? formTimeoutKey(id.name, call.client) : undefined;
     const where = dir ? `${dir}/${name}.md` : `${name}.md`;
     const preview = body.length > 400 ? `${body.slice(0, 400)}…` : body;
     const proposal =
       `${id.name} wants to ${mode} the note ${where}${type ? ` (${type})` : ""}${stamp.status ? " — it will land in quarantine, private, until you promote it" : ""}.\n\n` +
       `${description ?? ""}\n\n${preview}`;
-    const chatFallback = (requested = false): ToolResult => {
+    // Why the question goes to the chat: the form was closed unanswered, the
+    // caller asked for the chat, or this client is known to let the form time out.
+    const chatFallback = (reason: "closed" | "requested" | "timed-out" = "closed"): ToolResult => {
       // The proposal goes back to the model with a code that confirms
       // exactly it, bound to this fingerprint and good for WRITE_CONFIRMATION_TTL_MS.
       const tool = mode === "append" ? "brain_append" : "brain_write";
       return {
         ...text(
-          (requested
+          (reason === "requested"
             ? `Nothing was written yet: you asked to confirm in the chat, so no form was shown. `
-            : `Nothing was written yet: the confirmation form was closed without an answer, so the person has not seen it. `) +
+            : reason === "timed-out"
+              ? `Nothing was written yet: this client let an earlier confirmation form time out unseen, so no form was shown. `
+              : `Nothing was written yet: the confirmation form was closed without an answer, so the person has not seen it. `) +
             `Ask them in the chat now: show them the proposal below and wait for an explicit yes. ` +
             `Only if they say yes, call ${tool} again with exactly the same arguments plus confirmation: "${confirmationCode(fp)}". ` +
             `If they say no, or do not answer, do not call it.` +
-            (requested ? "" : ` If your client never shows this form, pass confirmIn: "chat" on the first call next time, to skip the wait.`) +
+            (reason === "closed" ? ` If your client never shows this form, pass confirmIn: "chat" on the first call next time, to skip the wait.` : "") +
             `\n\nProposal: ${proposal}`,
         ),
         structuredContent: { outcome: "needs-chat-confirmation", written: false },
@@ -747,7 +755,11 @@ async function runWrite(ctx: BrainContext, args: Record<string, unknown>, call?:
       // The caller knows its client will not show the form (some advertise
       // elicitation, then let it time out unseen after a minute): skip
       // straight to the chat. Same code, same trust as the `cancel` fallback.
-      return { ...chatFallback(true), audit: { pending: "chat-confirmation", requested: "chat" } };
+      return { ...chatFallback("requested"), audit: { pending: "chat-confirmation", requested: "chat" } };
+    } else if (!answer && timeoutKey && ctx.formTimeouts.has(timeoutKey)) {
+      // This client let a form time out before: asking it again would only
+      // cost the person another minute and lose the write the same way.
+      return { ...chatFallback("timed-out"), audit: { pending: "chat-confirmation", skippedForm: "timed-out-before", client: call?.client } };
     } else if (!answer || !stateMatches(call?.requestState ?? "", proposalArgs)) {
       // No answer yet, or one for a different proposal (the args changed
       // since this state was issued) — (re)ask, with a freshly timestamped
@@ -816,7 +828,21 @@ async function runWrite(ctx: BrainContext, args: Record<string, unknown>, call?:
         // the proposal to the model with a code only an explicit yes in
         // the chat can redeem. `audit.confirmField` records what shape the
         // field came in as (never its value) for diagnosing a client.
-        return { ...chatFallback(), audit: { pending: "chat-confirmation", answerAction: action ?? null, confirmField: confirmField === undefined ? "missing" : typeof confirmField } };
+        // An answer this long after the form was issued is the client's own
+        // request timeout, not a person closing it: remember the client, so
+        // its next write skips the form (see form-timeouts.ts).
+        const issuedAt = parseState(call?.requestState ?? "")?.ts;
+        const timedOut = !!timeoutKey && issuedAt !== undefined && Date.now() - issuedAt >= FORM_TIMEOUT_MS;
+        if (timedOut) ctx.formTimeouts.add(timeoutKey);
+        return {
+          ...chatFallback(),
+          audit: {
+            pending: "chat-confirmation",
+            answerAction: action ?? null,
+            confirmField: confirmField === undefined ? "missing" : typeof confirmField,
+            ...(timedOut ? { formTimedOut: true, client: call?.client } : {}),
+          },
+        };
       }
     }
   }

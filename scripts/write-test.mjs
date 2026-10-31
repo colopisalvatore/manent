@@ -259,6 +259,64 @@ ok(
   ["brain_write", "brain_append"].every((t) => findTool(t).description.includes("confirmIn") && "confirmIn" in findTool(t).inputSchemaJson.properties),
 );
 
+// A client that lets the form time out unseen (claude.ai: `cancel` after
+// exactly 60s) never shows the model the code sent back on that cancel
+// either. The server remembers the client, and its next write skips the form.
+console.log("\n── a client that lets the form time out ──");
+const claude = { ...elicits, client: "Claude-User" };
+const proposalTo = { ...proposal, name: "nota-form-scaduto-dal-client" };
+const askedTo = await findTool("brain_write").run(proposalTo, rw, claude);
+const fpTo = askedTo.inputRequired.requestState.split(".")[0];
+const cancelQuick = await findTool("brain_write").run(proposalTo, rw, {
+  ...claude,
+  requestState: askedTo.inputRequired.requestState,
+  inputResponses: { "confirm-write": { action: "cancel" } },
+});
+ok("a quick cancel is a person closing the form: client not remembered", cancelQuick.audit?.formTimedOut !== true);
+const againQuick = await findTool("brain_write").run(proposalTo, rw, claude);
+ok("…so the next write still gets the form", !!againQuick.inputRequired);
+const timedOut = await findTool("brain_write").run(proposalTo, rw, {
+  ...claude,
+  requestState: `${fpTo}.${(Date.now() - 61_000).toString(36)}`,
+  inputResponses: { "confirm-write": { action: "cancel" } },
+});
+ok(
+  "a cancel 60s after the form is a client timeout, recorded with the client",
+  timedOut.audit?.formTimedOut === true && timedOut.audit?.client === "Claude-User" && timedOut.structuredContent?.outcome === "needs-chat-confirmation",
+  JSON.stringify(timedOut.audit),
+);
+const skipped = await findTool("brain_write").run(proposalTo, rw, claude);
+const codeTo = skipped.content?.[0]?.text.match(/confirmation: "([^"]+)"/)?.[1];
+ok(
+  "the same client's next write skips the form and gets the code at once",
+  !skipped.inputRequired && skipped.audit?.skippedForm === "timed-out-before" && !!codeTo,
+  JSON.stringify(skipped.audit),
+);
+ok("nothing written while it waits for the chat", (await call(rw, "brain_read", { name: "nota-form-scaduto-dal-client" })).isError === true);
+const otherClient = await findTool("brain_write").run(proposalTo, rw, { ...elicits, client: "openai-mcp" });
+ok("another client still gets the form", !!otherClient.inputRequired);
+const noClient = await findTool("brain_write").run(proposalTo, rw, elicits);
+ok("a call with no User-Agent still gets the form", !!noClient.inputRequired);
+const yesTo = await findTool("brain_write").run({ ...proposalTo, confirmation: codeTo }, rw, claude);
+ok("the yes in the chat then writes", yesTo.structuredContent?.outcome === "written", JSON.stringify(yesTo.structuredContent));
+
+// The service restarts on every vault sync: the memory comes back from the audit.
+const auditDir = await mkdtemp(join(tmpdir(), "manent-audit-"));
+const auditPath = join(auditDir, "audit.jsonl");
+const line = (ts, client) => JSON.stringify({ ts, agent: "owner", tool: "brain_write", ok: true, ms: 0, pending: "chat-confirmation", formTimedOut: true, client });
+await writeFile(
+  auditPath,
+  [line(new Date().toISOString(), "Claude-User"), line(new Date(Date.now() - 8 * 24 * 3600 * 1000).toISOString(), "Old-Client"), '{"torn'].join("\n") + "\n",
+  "utf8",
+);
+const rebooted = await loadBrainContext(root, { writable: true, audit: auditPath });
+const afterBoot = await findTool("brain_write").run({ ...proposal, name: "nota-dopo-riavvio" }, rebooted, claude);
+ok("after a restart the client is still remembered, from the audit", !afterBoot.inputRequired && afterBoot.audit?.skippedForm === "timed-out-before");
+const oldOne = await findTool("brain_write").run({ ...proposal, name: "nota-dopo-riavvio" }, rebooted, { ...elicits, client: "Old-Client" });
+ok("a timeout older than the memory is forgotten", !!oldOne.inputRequired);
+await rebooted.close?.();
+await rm(auditDir, { recursive: true, force: true });
+
 // Expiry: a request state or a confirmation code older than the TTL is
 // reported as expired, specifically, rather than silently written or
 // silently re-asked forever.
