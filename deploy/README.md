@@ -67,7 +67,9 @@ field: a client that collapses a single required boolean into a plain confirm di
 `audit.answerAction` and `audit.confirmField` (never the note's content) record what shape a given
 client's answer actually took, for diagnosing one without reading the vault. `decline` — the action
 itself, or `content.confirm: false` inside `accept` — stays final, and nothing in this paragraph
-changes that. Both the form's `requestState` and the chat's code expire after ten minutes
+changes that. A client that advertises elicitation but never renders the form makes every write
+wait for its own timeout (a minute) before that `cancel`: the model passes `confirmIn: "chat"` to
+get the code at once instead, and the yes still has to come from the person in the chat. Both the form's `requestState` and the chat's code expire after ten minutes
 (`outcome: "expired"` in `structuredContent`, distinct from a decline); a client or chat that took
 longer just calls the write tool again. Generate one token per agent (`openssl rand -hex 32`), never
 share one between two, and expect the server to refuse to start rather than guess — a short token,

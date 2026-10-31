@@ -189,7 +189,10 @@ otherwise. When they are on:
    chosen — read as a decline, that would silently fail every write from such a client, as
    ChatGPT's connector did. It is not read as a decline: `content.confirm` has to be the literal
    boolean `false` (the form's own checkbox, submitted unticked) for that, and only then does
-   `decline` stay final. Every outcome of a write call — written, declined, waiting on the chat,
+   `decline` stay final. A client that advertises the capability but never shows the form at all
+   lets it time out unseen — a minute, on every attempt — before its `cancel` arrives; the model can
+   skip that wait with `confirmIn: "chat"`, which returns the same code at once without a form and
+   writes nothing by itself (`requested: "chat"` in the audit). Every outcome of a write call — written, declined, waiting on the chat,
    or expired — also comes back as `structuredContent: {outcome, written}`, so a caller does not
    have to pattern-match the English sentence in `content` to tell them apart. Both the form's
    `requestState` and the chat's confirmation code carry their own issue time and expire after ten

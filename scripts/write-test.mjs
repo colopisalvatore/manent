@@ -222,6 +222,43 @@ ok(
 );
 ok("nothing written", (await call(rw, "brain_read", { name: "nota-checkbox-no" })).isError === true);
 
+// A client that advertises elicitation but never shows the form lets it time
+// out after a minute, on every attempt. confirmIn: "chat" skips the form and
+// hands back the code at once; it writes nothing by itself.
+console.log("\n── confirmIn: chat (a client that never shows the form) ──");
+const proposalChat = { ...proposal, name: "nota-chiesta-in-chat" };
+const direct = await findTool("brain_write").run({ ...proposalChat, confirmIn: "chat" }, rw, elicits);
+const codeChat = direct.content?.[0]?.text.match(/confirmation: "([^"]+)"/)?.[1];
+ok(
+  "confirmIn: chat answers with a code at once, no form",
+  !direct.inputRequired && direct.structuredContent?.outcome === "needs-chat-confirmation" && !!codeChat,
+  JSON.stringify(direct.structuredContent),
+);
+ok("the audit says the chat was asked for", direct.audit?.requested === "chat");
+ok("nothing written by confirmIn alone", (await call(rw, "brain_read", { name: "nota-chiesta-in-chat" })).isError === true);
+const otherNote = await findTool("brain_write").run({ ...proposalChat, name: "nota-altra", confirmation: codeChat }, rw, elicits);
+ok("its code does not confirm another note", !!otherNote.inputRequired);
+const yesChat = await findTool("brain_write").run({ ...proposalChat, confirmIn: "chat", confirmation: codeChat }, rw, elicits);
+ok("the yes in the chat then writes", yesChat.structuredContent?.outcome === "written", JSON.stringify(yesChat.structuredContent));
+ok("the note is on disk", (await call(rw, "brain_read", { name: "nota-chiesta-in-chat" })).isError !== true);
+const appendChat = await findTool("brain_append").run({ name: "nota-chiesta-in-chat", body: "riga", confirmIn: "chat" }, rw, elicits);
+ok(
+  "brain_append takes confirmIn too",
+  !appendChat.inputRequired && appendChat.structuredContent?.outcome === "needs-chat-confirmation",
+  JSON.stringify(appendChat.structuredContent),
+);
+const cancelledChat = await findTool("brain_write").run({ ...proposal, name: "nota-suggerimento" }, rw, elicits);
+const hintChat = await findTool("brain_write").run({ ...proposal, name: "nota-suggerimento" }, rw, {
+  ...elicits,
+  requestState: cancelledChat.inputRequired.requestState,
+  inputResponses: { "confirm-write": { action: "cancel" } },
+});
+ok("the cancel fallback points at confirmIn for next time", /confirmIn: "chat"/.test(hintChat.content[0].text));
+ok(
+  "both write tools tell the model about confirmIn",
+  ["brain_write", "brain_append"].every((t) => findTool(t).description.includes("confirmIn") && "confirmIn" in findTool(t).inputSchemaJson.properties),
+);
+
 // Expiry: a request state or a confirmation code older than the TTL is
 // reported as expired, specifically, rather than silently written or
 // silently re-asked forever.

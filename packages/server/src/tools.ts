@@ -102,6 +102,10 @@ function noteFollowed(ctx: BrainContext, name: string): void {
 
 const CONFIRMATION_DOC =
   "only after a previous call answered with a confirmation code and the person said yes in the chat to the proposal it showed: that code. Never otherwise.";
+const CONFIRM_IN_DOC =
+  "'chat': skip the confirmation form and get the confirmation code at once, to ask the person in the chat. Use it when your client never shows the form (a write waits about a minute and comes back cancelled). It writes nothing by itself.";
+const WRITE_CONFIRM_HINT =
+  " If the server asks the person to confirm and your client shows no form, pass confirmIn: 'chat' and ask in the chat instead.";
 
 export const BRAIN_TOOLS: BrainTool[] = [
   {
@@ -329,7 +333,8 @@ export const BRAIN_TOOLS: BrainTool[] = [
     name: "brain_write",
     requiresWrite: true,
     description:
-      "Create or replace a note. Requires name (slug), description (one line) and type. mode: 'create' (default, refuses to clobber) or 'overwrite'. Text with personal data or model-directed instructions is refused. An agent's note lands in its own quarantine directory, private, until a person promotes it.",
+      "Create or replace a note. Requires name (slug), description (one line) and type. mode: 'create' (default, refuses to clobber) or 'overwrite'. Text with personal data or model-directed instructions is refused. An agent's note lands in its own quarantine directory, private, until a person promotes it." +
+      WRITE_CONFIRM_HINT,
     inputSchemaJson: {
       type: "object",
       properties: {
@@ -341,6 +346,7 @@ export const BRAIN_TOOLS: BrainTool[] = [
         mode: { type: "string", enum: ["create", "overwrite"], description: "default 'create'" },
         audience: { type: "array", items: { type: "string" }, description: "who may read it (owner only); default private" },
         confirmation: { type: "string", description: CONFIRMATION_DOC },
+        confirmIn: { type: "string", enum: ["chat"], description: CONFIRM_IN_DOC },
       },
       required: ["name", "description", "type", "body"],
       additionalProperties: false,
@@ -354,6 +360,7 @@ export const BRAIN_TOOLS: BrainTool[] = [
       mode: z.enum(["create", "overwrite"]).optional().describe("default 'create'"),
       audience: z.array(z.string()).optional().describe("who may read it (owner only); default private"),
       confirmation: z.string().optional().describe(CONFIRMATION_DOC),
+      confirmIn: z.enum(["chat"]).optional().describe(CONFIRM_IN_DOC),
     },
     run: (args, ctx, call) => runWrite(ctx, { ...args, mode: args.mode ?? "create" }, call),
   },
@@ -361,7 +368,7 @@ export const BRAIN_TOOLS: BrainTool[] = [
     name: "brain_append",
     requiresWrite: true,
     description:
-      "Append markdown to the body of an existing note, leaving its frontmatter intact.",
+      "Append markdown to the body of an existing note, leaving its frontmatter intact." + WRITE_CONFIRM_HINT,
     inputSchemaJson: {
       type: "object",
       properties: {
@@ -369,6 +376,7 @@ export const BRAIN_TOOLS: BrainTool[] = [
         body: { type: "string", description: "markdown to append" },
         dir: { type: "string", description: "vault-relative folder the note lives in (owner only)" },
         confirmation: { type: "string", description: CONFIRMATION_DOC },
+        confirmIn: { type: "string", enum: ["chat"], description: CONFIRM_IN_DOC },
       },
       required: ["name", "body"],
       additionalProperties: false,
@@ -378,6 +386,7 @@ export const BRAIN_TOOLS: BrainTool[] = [
       body: z.string().describe("markdown to append"),
       dir: z.string().optional().describe("vault-relative folder the note lives in (owner only)"),
       confirmation: z.string().optional().describe(CONFIRMATION_DOC),
+      confirmIn: z.enum(["chat"]).optional().describe(CONFIRM_IN_DOC),
     },
     run: (args, ctx, call) => runWrite(ctx, { ...args, mode: "append" }, call),
   },
@@ -693,16 +702,20 @@ async function runWrite(ctx: BrainContext, args: Record<string, unknown>, call?:
     const proposal =
       `${id.name} wants to ${mode} the note ${where}${type ? ` (${type})` : ""}${stamp.status ? " — it will land in quarantine, private, until you promote it" : ""}.\n\n` +
       `${description ?? ""}\n\n${preview}`;
-    const chatFallback = (): ToolResult => {
+    const chatFallback = (requested = false): ToolResult => {
       // The proposal goes back to the model with a code that confirms
       // exactly it, bound to this fingerprint and good for WRITE_CONFIRMATION_TTL_MS.
       const tool = mode === "append" ? "brain_append" : "brain_write";
       return {
         ...text(
-          `Nothing was written yet: the confirmation form was closed without an answer, so the person has not seen it. ` +
+          (requested
+            ? `Nothing was written yet: you asked to confirm in the chat, so no form was shown. `
+            : `Nothing was written yet: the confirmation form was closed without an answer, so the person has not seen it. `) +
             `Ask them in the chat now: show them the proposal below and wait for an explicit yes. ` +
             `Only if they say yes, call ${tool} again with exactly the same arguments plus confirmation: "${confirmationCode(fp)}". ` +
-            `If they say no, or do not answer, do not call it.\n\nProposal: ${proposal}`,
+            `If they say no, or do not answer, do not call it.` +
+            (requested ? "" : ` If your client never shows this form, pass confirmIn: "chat" on the first call next time, to skip the wait.`) +
+            `\n\nProposal: ${proposal}`,
         ),
         structuredContent: { outcome: "needs-chat-confirmation", written: false },
         audit: { pending: "chat-confirmation" },
@@ -730,6 +743,11 @@ async function runWrite(ctx: BrainContext, args: Record<string, unknown>, call?:
         structuredContent: { outcome: "expired", written: false },
         audit: { pending: "confirmation-expired" },
       };
+    } else if (args.confirmIn === "chat") {
+      // The caller knows its client will not show the form (some advertise
+      // elicitation, then let it time out unseen after a minute): skip
+      // straight to the chat. Same code, same trust as the `cancel` fallback.
+      return { ...chatFallback(true), audit: { pending: "chat-confirmation", requested: "chat" } };
     } else if (!answer || !stateMatches(call?.requestState ?? "", proposalArgs)) {
       // No answer yet, or one for a different proposal (the args changed
       // since this state was issued) — (re)ask, with a freshly timestamped
